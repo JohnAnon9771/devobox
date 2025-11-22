@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -e
+
+CONFIG_DIR="$HOME/.config/devobox"
+
+# Cores
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Lista de bancos disponíveis
+DATABASES=("postgres" "redis")
+
+show_help() {
+    echo -e "${BLUE}📦 Devobox CLI${NC}"
+    echo "Uso: devobox [comando]"
+    echo ""
+    echo "Ambiente:"
+    echo "  shell [--with-dbs]  -> Entra no ambiente (use --with-dbs para iniciar DBs)"
+    echo "  up                  -> Sobe tudo em background"
+    echo "  down                -> Para tudo (libera RAM)"
+    echo "  status              -> Mostra containers"
+    echo "  rebuild             -> Reconstrói a imagem"
+    echo ""
+    echo "Bancos de dados:"
+    echo "  db start [service]  -> Inicia todos os bancos ou um específico (postgres|redis)"
+    echo "  db stop [service]   -> Para todos os bancos ou um específico"
+    echo "  db restart [service]-> Reinicia todos os bancos ou um específico"
+    echo "  db status           -> Status dos bancos"
+}
+
+check_running() {
+    podman container inspect "$1" --format '{{.State.Running}}' 2>/dev/null | grep -q "true"
+}
+
+is_valid_database() {
+    local service="$1"
+    for db in "${DATABASES[@]}"; do
+        if [ "$db" = "$service" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+start_database() {
+    local service="$1"
+
+    if ! is_valid_database "$service"; then
+        echo -e "${RED}❌ Banco '$service' não encontrado. Opções: ${DATABASES[*]}${NC}"
+        return 1
+    fi
+
+    if check_running "$service"; then
+        echo -e "${YELLOW}⚠️  $service já está rodando${NC}"
+    else
+        echo -e "${BLUE}🔌 Iniciando $service...${NC}"
+        podman start "$service" >/dev/null
+        echo -e "${GREEN}✅ $service iniciado${NC}"
+    fi
+}
+
+stop_database() {
+    local service="$1"
+
+    if ! is_valid_database "$service"; then
+        echo -e "${RED}❌ Banco '$service' não encontrado. Opções: ${DATABASES[*]}${NC}"
+        return 1
+    fi
+
+    if check_running "$service"; then
+        echo -e "${BLUE}💤 Parando $service...${NC}"
+        podman stop "$service" >/dev/null 2>&1
+        echo -e "${GREEN}✅ $service parado${NC}"
+    else
+        echo -e "${YELLOW}⚠️  $service já está parado${NC}"
+    fi
+}
+
+start_all_dbs() {
+    echo -e "${BLUE}🔌 Iniciando todos os bancos...${NC}"
+    for db in "${DATABASES[@]}"; do
+        start_database "$db"
+    done
+}
+
+stop_all_dbs() {
+    echo -e "${BLUE}💤 Parando todos os bancos...${NC}"
+    for db in "${DATABASES[@]}"; do
+        stop_database "$db"
+    done
+}
+
+restart_database() {
+    local service="$1"
+    stop_database "$service"
+    sleep 1
+    start_database "$service"
+}
+
+restart_all_dbs() {
+    echo -e "${BLUE}🔄 Reiniciando todos os bancos...${NC}"
+    for db in "${DATABASES[@]}"; do
+        restart_database "$db"
+    done
+}
+
+show_db_status() {
+    echo -e "${BLUE}📊 Status dos bancos:${NC}"
+    for db in "${DATABASES[@]}"; do
+        if check_running "$db"; then
+            echo -e "  ${GREEN}●${NC} $db (rodando)"
+        else
+            echo -e "  ${RED}○${NC} $db (parado)"
+        fi
+    done
+}
+
+case "$1" in
+    shell|enter)
+        # Verifica se deve iniciar os DBs
+        if [ "$2" = "--with-dbs" ]; then
+            start_all_dbs
+        fi
+
+        if ! check_running "devobox"; then
+             echo -e "${BLUE}   Iniciando Devobox...${NC}"
+             podman start devobox >/dev/null
+        fi
+        echo -e "${GREEN}🚀 Entrando no Devobox...${NC}"
+        # Mapeia o diretório atual do host para dentro do container
+        WORK_DIR=$(pwd | sed "s|$HOME|/home/dev|")
+        podman exec -it -w "$WORK_DIR" devobox bash
+        ;;
+
+    db)
+        case "$2" in
+            start)
+                if [ -z "$3" ]; then
+                    start_all_dbs
+                else
+                    start_database "$3"
+                fi
+                ;;
+            stop)
+                if [ -z "$3" ]; then
+                    stop_all_dbs
+                else
+                    stop_database "$3"
+                fi
+                ;;
+            restart)
+                if [ -z "$3" ]; then
+                    restart_all_dbs
+                else
+                    restart_database "$3"
+                fi
+                ;;
+            status|ls)
+                show_db_status
+                ;;
+            *)
+                echo -e "${RED}❌ Subcomando inválido para 'db'${NC}"
+                echo "Uso: devobox db {start|stop|restart|status} [postgres|redis]"
+                exit 1
+                ;;
+        esac
+        ;;
+
+    up)
+        start_all_dbs
+        podman start devobox >/dev/null 2>&1 || true
+        echo -e "${GREEN}✅ Ambiente rodando em background.${NC}"
+        ;;
+
+    down|stop)
+        echo -e "${BLUE}💤 Parando ambiente...${NC}"
+        podman stop devobox postgres redis >/dev/null 2>&1 || true
+        echo -e "${GREEN}✅ Tudo parado.${NC}"
+        ;;
+
+    status)
+        podman ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E 'devobox|dev-'
+        ;;
+
+    rebuild)
+        echo -e "${BLUE}🏗️  Reconstruindo ambiente...${NC}"
+        cd "$CONFIG_DIR" && make build
+        ;;
+
+    *)
+        show_help
+        ;;
+esac

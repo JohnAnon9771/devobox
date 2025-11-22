@@ -1,0 +1,25 @@
+FROM docker.io/archlinux:latest
+
+RUN pacman -Sy --noconfirm archlinux-keyring && \
+    pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+      base-devel git curl openssh wget \
+      libffi zlib openssl readline ncurses libyaml gdbm \
+      postgresql-libs redis imagemagick vips \
+      man-db vim shadow \
+      iputils iproute2 bind-tools && \
+    pacman -Scc --noconfirm
+
+# Add user dev
+RUN useradd -m -s /bin/bash dev
+
+USER dev
+WORKDIR /home/dev
+
+RUN curl https://mise.jdx.dev/install.sh | sh
+
+ENV PATH="/home/dev/.local/bin:${PATH}"
+RUN echo 'eval "$($HOME/.local/bin/mise activate bash)"' >> ~/.bashrc && \
+    echo 'PS1="\[\e[1;36m\][devobox] \w \$ \[\e[0m\]"' >> ~/.bashrc
+
+CMD ["/bin/bash"]
