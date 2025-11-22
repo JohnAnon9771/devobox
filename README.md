@@ -53,8 +53,8 @@ Em ambientes Docker Compose puros, toda vez que você derruba o container, você
 **A Solução Devobox:**
 Criar um **"Container de Estimação" (Pet Container)**.
 
-- Persiste seu histórico de Bash (`.bash_history`)
 - Persiste suas ferramentas instaladas via Mise
+- Mantém o container rodando (não é destruído a cada uso)
 - Se comporta como um **segundo computador** que está sempre lá, pronto para você trabalhar, mas que pode ser resetado se necessário
 
 ### 4. 💾 Eficiência de Recursos (O Modelo "Shared Services")
@@ -251,13 +251,13 @@ redis://localhost:6379
 ## 📝 Workflow Completo
 
 ```bash
-# 1. Iniciar ambiente com bancos
+# 1. Navegar para seu projeto (no host)
+cd ~/code/meu-projeto
+
+# 2. Iniciar ambiente com bancos (já começa no diretório correto)
 devobox shell --with-dbs
 
-# 2. Navegar para projeto (dentro do container)
-cd code/meu-projeto
-
-# 3. Configurar runtimes com Mise
+# 3. Configurar runtimes com Mise (dentro do container)
 mise use node@20.11.0
 mise use ruby@3.2.2
 
@@ -293,41 +293,56 @@ devobox down
    - Usuário: `dev` (não-root)
    - Network: `--network host` (performance máxima)
    - Volumes:
-     - `~/code:/home/dev/code` (bind mount)
-     - `devobox_mise:/home/dev/.local/share/mise` (volume nomeado)
+     - `~/code:/home/dev/code` (bind mount - projetos)
+     - `devobox_mise:/home/dev/.local/share/mise` (volume nomeado - ferramentas Mise)
    - Segurança: `--userns=keep-id` (preserva UID/GID do host)
 
 2. **postgres** - PostgreSQL 16
    - Estado padrão: Parado (start sob demanda)
+   - Network: Bridge (port mapping `-p 5432:5432`)
    - Porta: 5432
-   - Dados: Volume efêmero (recria ao rebuild)
+   - Dados: Persistem entre restarts, perdidos no rebuild
 
 3. **redis** - Redis 7 Alpine
    - Estado padrão: Parado (start sob demanda)
+   - Network: Bridge (port mapping `-p 6379:6379`)
    - Porta: 6379
-   - Dados: Efêmero
+   - Dados: Persistem entre restarts, perdidos no rebuild
 
 ### Decisões de Design
 
-**Por que `--network host`?**
+**Por que `--network host` (apenas no devobox)?**
 
-- Elimina latência de bridge networking
-- `localhost` no container = `localhost` no host
-- Simplifica configuração de apps (sem port mapping)
+- O container **devobox** usa `--network host` para performance máxima
+- Postgres e Redis usam **bridge networking** com port mapping (`-p`)
+- Isso permite que aplicações no devobox acessem `localhost:5432` e `localhost:6379` diretamente
+- Simplifica configuração: `DATABASE_URL=postgresql://dev:devpass@localhost:5432/mydb`
+- Elimina latência de bridge networking para o ambiente de desenvolvimento
 
 **Por que `--userns=keep-id`?**
 
 - Arquivos criados no container pertencem ao seu usuário no host
 - Evita problemas de permissão com `git`, `npm`, `bundle`
+- UID/GID dentro do container = UID/GID no host
 
 **Por que `--security-opt label=disable`?**
 
 - Desativa SELinux labeling (compatibilidade com diferentes distros)
+- Necessário para bind mounts funcionarem corretamente
 
 **Por que containers separados para DBs?**
 
 - Permite gerenciamento granular (start/stop individual)
 - Facilita upgrade de versões (ex: Postgres 16 → 17)
+- Economiza recursos (inicia apenas o que precisa)
+
+**Persistência de Dados:**
+
+- ✅ **Ferramentas Mise**: Persistem via volume `devobox_mise` (sobrevivem a `rebuild`)
+- ✅ **Projetos**: Persistem via bind mount `~/code` (seus arquivos no host)
+- ⚠️ **Histórico bash**: NÃO persiste (perdido ao executar `rebuild`)
+- ⚠️ **Bancos de dados**: Persistem entre restarts (`down`/`up`), mas são **perdidos** ao executar `rebuild`
+- 💡 **Dica**: Para persistência permanente de dados de banco, adicione volumes nomeados no Makefile
 
 ## ⚙️ Customização
 
