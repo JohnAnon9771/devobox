@@ -12,6 +12,7 @@ NC='\033[0m'
 
 # Available databases list
 DATABASES=("postgres" "redis")
+CONTAINERS=("devobox" "${DATABASES[@]}")
 
 show_help() {
     echo -e "${BLUE}📦 Devobox CLI${NC}"
@@ -33,6 +34,21 @@ show_help() {
 
 check_running() {
     podman container inspect "$1" --format '{{.State.Running}}' 2>/dev/null | grep -q "true"
+}
+
+get_container_state() {
+    local name="$1"
+
+    if ! podman container inspect "$name" >/dev/null 2>&1; then
+        echo "não criado"
+        return
+    fi
+
+    if check_running "$name"; then
+        echo "rodando"
+    else
+        echo "parado"
+    fi
 }
 
 is_valid_database() {
@@ -118,6 +134,40 @@ show_db_status() {
     done
 }
 
+show_containers_status() {
+    echo -e "${BLUE}📦 Status dos containers:${NC}"
+    printf "%-12s | %-11s\n" "Container" "Estado"
+    printf '%s\n' "-----------------------------"
+
+    local missing=0
+
+    for container in "${CONTAINERS[@]}"; do
+        local state
+        local color
+
+        state=$(get_container_state "$container")
+
+        case "$state" in
+            "rodando")
+                color="$GREEN"
+                ;;
+            "parado")
+                color="$YELLOW"
+                ;;
+            "não criado")
+                color="$RED"
+                missing=1
+                ;;
+        esac
+
+        printf " %-11s | %b%s%b\n" "$container" "$color" "$state" "$NC"
+    done
+
+    if (( missing )); then
+        echo -e "${YELLOW}⚠️  Algum container não foi encontrado. Execute 'devobox rebuild' para recriar.${NC}"
+    fi
+}
+
 case "$1" in
     shell|enter)
         # Check if should start databases
@@ -184,7 +234,7 @@ case "$1" in
         ;;
 
     status)
-        podman ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E 'devobox|postgres|redis'
+        show_containers_status
         ;;
 
     rebuild)
