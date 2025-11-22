@@ -10,8 +10,35 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Available databases list
-DATABASES=("postgres" "redis")
+# Available databases list (loaded dinamically)
+DATABASES=()
+
+load_databases() {
+    local config_file="$CONFIG_DIR/databases.conf"
+
+    if [ ! -f "$config_file" ]; then
+        echo -e "${RED}❌ Arquivo de bancos não encontrado em $config_file${NC}"
+        exit 1
+    fi
+
+    DATABASES=()
+
+    while IFS='|' read -r name _; do
+        name=$(echo "$name" | xargs)
+
+        if [ -z "$name" ] || [[ "$name" == \#* ]]; then
+            continue
+        fi
+
+        DATABASES+=("$name")
+    done < "$config_file"
+
+    if [ ${#DATABASES[@]} -eq 0 ]; then
+        echo -e "${YELLOW}⚠️  Nenhum banco configurado em $config_file${NC}"
+    fi
+}
+
+load_databases
 CONTAINERS=("devobox" "${DATABASES[@]}")
 
 show_help() {
@@ -25,8 +52,8 @@ show_help() {
     echo "  status              -> Mostra containers"
     echo "  rebuild             -> Reconstrói a imagem"
     echo ""
-    echo "Bancos de dados:"
-    echo "  db start [service]  -> Inicia todos os bancos ou um específico (postgres|redis)"
+    echo "Bancos de dados (definidos em databases.conf):"
+    echo "  db start [service]  -> Inicia todos os bancos ou um específico"
     echo "  db stop [service]   -> Para todos os bancos ou um específico"
     echo "  db restart [service]-> Reinicia todos os bancos ou um específico"
     echo "  db status           -> Status dos bancos"
@@ -96,6 +123,11 @@ stop_database() {
 }
 
 start_all_dbs() {
+    if [ ${#DATABASES[@]} -eq 0 ]; then
+        echo -e "${YELLOW}⚠️  Nenhum banco configurado para iniciar.${NC}"
+        return
+    fi
+
     echo -e "${BLUE}🔌 Iniciando todos os bancos...${NC}"
     for db in "${DATABASES[@]}"; do
         start_database "$db"
@@ -103,6 +135,11 @@ start_all_dbs() {
 }
 
 stop_all_dbs() {
+    if [ ${#DATABASES[@]} -eq 0 ]; then
+        echo -e "${YELLOW}⚠️  Nenhum banco configurado para parar.${NC}"
+        return
+    fi
+
     echo -e "${BLUE}💤 Parando todos os bancos...${NC}"
     for db in "${DATABASES[@]}"; do
         stop_database "$db"
@@ -117,6 +154,11 @@ restart_database() {
 }
 
 restart_all_dbs() {
+    if [ ${#DATABASES[@]} -eq 0 ]; then
+        echo -e "${YELLOW}⚠️  Nenhum banco configurado para reiniciar.${NC}"
+        return
+    fi
+
     echo -e "${BLUE}🔄 Reiniciando todos os bancos...${NC}"
     for db in "${DATABASES[@]}"; do
         restart_database "$db"
@@ -125,6 +167,12 @@ restart_all_dbs() {
 
 show_db_status() {
     echo -e "${BLUE}📊 Status dos bancos:${NC}"
+
+    if [ ${#DATABASES[@]} -eq 0 ]; then
+        echo -e "  ${YELLOW}○${NC} Nenhum banco configurado em $CONFIG_DIR/databases.conf"
+        return
+    fi
+
     for db in "${DATABASES[@]}"; do
         if check_running "$db"; then
             echo -e "  ${GREEN}●${NC} $db (rodando)"
@@ -215,7 +263,7 @@ case "$1" in
                 ;;
             *)
                 echo -e "${RED}❌ Subcomando inválido para 'db'${NC}"
-                echo "Uso: devobox db {start|stop|restart|status} [postgres|redis]"
+                echo "Uso: devobox db {start|stop|restart|status} [serviço]"
                 exit 1
                 ;;
         esac
@@ -229,7 +277,7 @@ case "$1" in
 
     down|stop)
         echo -e "${BLUE}💤 Parando ambiente...${NC}"
-        podman stop devobox postgres redis >/dev/null 2>&1 || true
+        podman stop devobox "${DATABASES[@]}" >/dev/null 2>&1 || true
         echo -e "${GREEN}✅ Tudo parado.${NC}"
         ;;
 
