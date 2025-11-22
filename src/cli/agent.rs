@@ -1,8 +1,10 @@
-use crate::config::{copy_template_if_missing, default_config_dir, ensure_config_dir};
-use crate::podman::command_available;
 use anyhow::Result;
 use clap::{Args, Subcommand};
+use devobox::infra::PodmanAdapter;
+use devobox::infra::config::{copy_template_if_missing, default_config_dir, ensure_config_dir};
+use devobox::services::ContainerService;
 use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Args)]
 pub struct AgentOptions {
@@ -17,7 +19,7 @@ pub enum AgentCommand {
     /// Copia templates de config para o diretório de configuração
     Install {
         /// Diretório fonte contendo Containerfile e databases.yml
-        #[arg(long, default_value = "config")] // relativo ao repo
+        #[arg(long, default_value = "config")]
         source: String,
     },
 }
@@ -32,9 +34,11 @@ pub fn run(command: AgentOptions, config_dir: &Path) -> Result<()> {
 fn doctor(config_dir: &Path) -> Result<()> {
     println!("🔍 Checando dependências e configuração...");
     let checks = ["podman", "bash"];
+    let runtime = Arc::new(PodmanAdapter::new());
+    let service = ContainerService::new(runtime);
 
     for dep in checks {
-        if command_available(dep) {
+        if service.is_command_available(dep) {
             println!("✅ {dep} disponível");
         } else {
             println!("⚠️  {dep} não encontrado no PATH");

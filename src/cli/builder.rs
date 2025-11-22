@@ -1,8 +1,10 @@
-use crate::config::load_databases;
-use crate::podman::{PodmanCreate, build_image, create_container, remove_container};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
+use devobox::infra::PodmanAdapter;
+use devobox::infra::config::{databases_path, load_databases};
+use devobox::services::ContainerService;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[derive(Args)]
 pub struct BuilderCommand {
@@ -27,8 +29,11 @@ pub fn run(cmd: BuilderCommand, config_dir: &Path) -> Result<()> {
 
 fn check() -> Result<()> {
     println!("🔧 Checando ferramentas de build...");
+    let runtime = Arc::new(PodmanAdapter::new());
+    let service = ContainerService::new(runtime);
+
     for dep in ["podman"] {
-        if crate::podman::command_available(dep) {
+        if service.is_command_available(dep) {
             println!("✅ {dep} disponível");
         } else {
             println!("⚠️  {dep} não encontrado no PATH");
@@ -38,7 +43,10 @@ fn check() -> Result<()> {
 }
 
 fn build(config_dir: &Path) -> Result<()> {
+    let runtime = Arc::new(PodmanAdapter::new());
+    let service = ContainerService::new(runtime);
     let containerfile = config_dir.join("Containerfile");
+
     if !containerfile.exists() {
         bail!(
             "Containerfile não encontrado em {:?}. Rode 'devobox agent install' primeiro.",
@@ -48,11 +56,11 @@ fn build(config_dir: &Path) -> Result<()> {
 
     let context = config_dir.to_path_buf();
     println!("🏗️  Construindo imagem Devobox (Arch)...");
-    build_image("devobox-img", &containerfile, &context)?;
+    service.build_image("devobox-img", &containerfile, &context)?;
 
     println!(
         "🗄️  Lendo bancos de dados em {:?}...",
-        crate::config::databases_path(config_dir)
+        databases_path(config_dir)
     );
     let databases = load_databases(config_dir)?;
 
@@ -61,20 +69,7 @@ fn build(config_dir: &Path) -> Result<()> {
     }
 
     for db in &databases {
-        let create = PodmanCreate {
-            name: &db.name,
-            image: &db.image,
-            ports: &db.ports,
-            env: &db.env,
-            volumes: &db.volumes,
-            network: None,
-            userns: None,
-            security_opt: None,
-            workdir: None,
-            extra_args: &[],
-        };
-
-        recreate(&create)?;
+        service.recreate(&db.to_spec())?;
     }
 
     let code_dir = code_mount()?;
@@ -83,7 +78,7 @@ fn build(config_dir: &Path) -> Result<()> {
         "devobox_mise:/home/dev/.local/share/mise".to_string(),
     ];
 
-    let dev = PodmanCreate {
+    let dev_spec = devobox::domain::ContainerSpec {
         name: "devobox",
         image: "devobox-img",
         ports: &[],
@@ -96,7 +91,7 @@ fn build(config_dir: &Path) -> Result<()> {
         extra_args: &["-it"],
     };
 
-    recreate(&dev)?;
+    service.recreate(&dev_spec)?;
     println!("✅ Build concluído! Tudo pronto.");
     Ok(())
 }
@@ -122,10 +117,4 @@ fn code_mount() -> Result<String> {
     }
 
     Ok(format!("{}:/home/dev/code", path.to_string_lossy()))
-}
-
-fn recreate(spec: &PodmanCreate) -> Result<()> {
-    remove_container(spec.name)?;
-    create_container(spec)?;
-    Ok(())
 }

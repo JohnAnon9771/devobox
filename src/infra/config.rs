@@ -1,20 +1,9 @@
+use crate::domain::Database;
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct Database {
-    pub name: String,
-    pub image: String,
-    #[serde(default)]
-    pub ports: Vec<String>,
-    #[serde(default)]
-    pub env: Vec<String>,
-    #[serde(default)]
-    pub volumes: Vec<String>,
-}
 
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -79,7 +68,7 @@ fn parse_databases(content: &str, path: &Path) -> Result<Vec<Database>> {
     let doc: DatabaseDocument =
         serde_yaml::from_str(content).with_context(|| format!("parse de {:?}", path))?;
 
-    let mut databases = match doc {
+    let databases = match doc {
         DatabaseDocument::Root { databases } => databases,
         DatabaseDocument::List(list) => list,
     };
@@ -105,7 +94,7 @@ fn parse_databases(content: &str, path: &Path) -> Result<Vec<Database>> {
         }
     }
 
-    Ok(databases.drain(..).collect())
+    Ok(databases)
 }
 
 #[cfg(test)]
@@ -180,5 +169,68 @@ databases:
     fn empty_file_is_allowed() {
         let parsed = parse_databases("   \n", Path::new("databases.yml"));
         assert_eq!(parsed.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn rejects_missing_image() {
+        let yaml = r#"
+- name: pg
+  image: ""
+"#;
+
+        let err = parse_databases(yaml, Path::new("databases.yml")).unwrap_err();
+        assert!(err.to_string().contains("sem 'image'"));
+    }
+
+    #[test]
+    fn parses_database_with_minimal_fields() {
+        let yaml = r#"
+- name: minimal
+  image: minimal:latest
+"#;
+
+        let dbs = parse_databases(yaml, Path::new("databases.yml")).unwrap();
+        assert_eq!(dbs.len(), 1);
+        assert_eq!(dbs[0].name, "minimal");
+        assert_eq!(dbs[0].image, "minimal:latest");
+        assert!(dbs[0].ports.is_empty());
+        assert!(dbs[0].env.is_empty());
+        assert!(dbs[0].volumes.is_empty());
+    }
+
+    #[test]
+    fn parses_multiple_databases() {
+        let yaml = r#"
+databases:
+  - name: db1
+    image: postgres:15
+  - name: db2
+    image: mysql:8
+  - name: db3
+    image: redis:7
+"#;
+
+        let dbs = parse_databases(yaml, Path::new("databases.yml")).unwrap();
+        assert_eq!(dbs.len(), 3);
+        assert_eq!(dbs[0].name, "db1");
+        assert_eq!(dbs[1].name, "db2");
+        assert_eq!(dbs[2].name, "db3");
+    }
+
+    #[test]
+    fn preserves_database_order() {
+        let yaml = r#"
+- name: first
+  image: first:1
+- name: second
+  image: second:2
+- name: third
+  image: third:3
+"#;
+
+        let dbs = parse_databases(yaml, Path::new("databases.yml")).unwrap();
+        assert_eq!(dbs[0].name, "first");
+        assert_eq!(dbs[1].name, "second");
+        assert_eq!(dbs[2].name, "third");
     }
 }

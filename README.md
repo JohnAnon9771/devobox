@@ -81,14 +81,51 @@ Centralizar a infraestrutura.
 
 ## 🚀 Instalação
 
+### Método 1: Instalar via Release (Recomendado)
+
 ```bash
-git clone <seu-repo>
-cd devobox
-cargo build --release
-install -Dm755 ./target/release/devobox ~/.local/bin/devobox
+# 1. Baixar a última release
+curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64.tar.gz -o devobox.tar.gz
+
+# 2. Extrair o binário
+tar xzf devobox.tar.gz
+
+# 3. Mover para ~/.local/bin
+mkdir -p ~/.local/bin
+mv devobox-linux-x86_64 ~/.local/bin/devobox
+chmod +x ~/.local/bin/devobox
+
+# 4. Garantir que ~/.local/bin está no PATH
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# 5. Verificar instalação
+devobox --version
+
+# 6. Configurar ambiente
 devobox agent install
 devobox builder build
 ```
+
+### Método 2: Compilar do Código Fonte
+
+```bash
+# 1. Clonar repositório
+git clone https://github.com/JohnAnon9771/devobox.git
+cd devobox
+
+# 2. Compilar
+cargo build --release
+
+# 3. Instalar
+install -Dm755 ./target/release/devobox ~/.local/bin/devobox
+
+# 4. Configurar ambiente
+devobox agent install
+devobox builder build
+```
+
+### Após a Instalação
 
 A própria CLI cuida da preparação do ambiente:
 

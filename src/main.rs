@@ -1,14 +1,8 @@
-mod agent;
-mod builder;
-mod config;
-mod podman;
-mod runtime;
+mod cli;
 
-use agent::AgentOptions;
 use anyhow::Result;
-use builder::BuilderCommand;
 use clap::{Parser, Subcommand};
-use runtime::RuntimeCommand;
+use cli::{AgentOptions, BuilderCommand, RuntimeCommand};
 
 #[derive(Parser)]
 #[command(
@@ -17,7 +11,7 @@ use runtime::RuntimeCommand;
 )]
 struct Cli {
     /// Diretório de configuração (default: ~/.config/devobox)
-    #[arg(long, env = "DEVOBOX_CONFIG_DIR", default_value_t = config::default_config_dir())]
+    #[arg(long, env, default_value_os_t = devobox::infra::config::default_config_dir())]
     config_dir: std::path::PathBuf,
 
     #[command(subcommand)]
@@ -38,8 +32,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Agent(options) => agent::run(options, &cli.config_dir),
-        Commands::Builder(cmd) => builder::run(cmd, &cli.config_dir),
-        Commands::Runtime(cmd) => runtime::run(cmd, &cli.config_dir),
+        Commands::Agent(options) => cli::agent::run(options, &cli.config_dir),
+        Commands::Builder(cmd) => cli::builder::run(cmd, &cli.config_dir),
+        Commands::Runtime(cmd) => cli::runtime::run(cmd, &cli.config_dir),
     }
 }
