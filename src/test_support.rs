@@ -1,0 +1,171 @@
+// Test utilities and mocks
+use crate::domain::{Container, ContainerRuntime, ContainerSpec, ContainerState};
+use anyhow::{Result, bail};
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::RwLock;
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct MockContainer {
+    pub name: String,
+    pub state: ContainerState,
+    pub spec: Option<MockContainerSpec>,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct MockContainerSpec {
+    pub image: String,
+    pub ports: Vec<String>,
+    pub env: Vec<String>,
+}
+
+pub struct MockRuntime {
+    containers: RwLock<HashMap<String, MockContainer>>,
+    commands: RwLock<Vec<String>>,
+    fail_on: RwLock<Option<String>>,
+}
+
+impl MockRuntime {
+    pub fn new() -> Self {
+        Self {
+            containers: RwLock::new(HashMap::new()),
+            commands: RwLock::new(Vec::new()),
+            fail_on: RwLock::new(None),
+        }
+    }
+
+    pub fn add_container(&self, name: &str, state: ContainerState) {
+        self.containers.write().unwrap().insert(
+            name.to_string(),
+            MockContainer {
+                name: name.to_string(),
+                state,
+                spec: None,
+            },
+        );
+    }
+
+    #[allow(dead_code)]
+    pub fn set_fail_on(&self, operation: &str) {
+        *self.fail_on.write().unwrap() = Some(operation.to_string());
+    }
+
+    pub fn get_commands(&self) -> Vec<String> {
+        self.commands.read().unwrap().clone()
+    }
+
+    #[allow(dead_code)]
+    pub fn container_exists(&self, name: &str) -> bool {
+        self.containers.read().unwrap().contains_key(name)
+    }
+
+    pub fn get_state(&self, name: &str) -> Option<ContainerState> {
+        self.containers
+            .read()
+            .unwrap()
+            .get(name)
+            .map(|c| c.state.clone())
+    }
+
+    fn record_command(&self, cmd: &str) {
+        self.commands.write().unwrap().push(cmd.to_string());
+    }
+
+    fn check_fail(&self, operation: &str) -> Result<()> {
+        if let Some(ref fail_on) = *self.fail_on.read().unwrap() {
+            if fail_on == operation {
+                bail!("Mock failure on: {}", operation);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Default for MockRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ContainerRuntime for MockRuntime {
+    fn get_container(&self, name: &str) -> Result<Container> {
+        self.record_command(&format!("get_container:{}", name));
+        self.check_fail("get_container")?;
+
+        let state = self
+            .containers
+            .read()
+            .unwrap()
+            .get(name)
+            .map(|c| c.state.clone())
+            .unwrap_or(ContainerState::NotCreated);
+
+        Ok(Container::new(name.to_string(), state))
+    }
+
+    fn start_container(&self, name: &str) -> Result<()> {
+        self.record_command(&format!("start:{}", name));
+        self.check_fail("start")?;
+
+        if let Some(container) = self.containers.write().unwrap().get_mut(name) {
+            container.state = ContainerState::Running;
+        }
+        Ok(())
+    }
+
+    fn stop_container(&self, name: &str) -> Result<()> {
+        self.record_command(&format!("stop:{}", name));
+        self.check_fail("stop")?;
+
+        if let Some(container) = self.containers.write().unwrap().get_mut(name) {
+            container.state = ContainerState::Stopped;
+        }
+        Ok(())
+    }
+
+    fn create_container(&self, spec: &ContainerSpec) -> Result<()> {
+        self.record_command(&format!("create:{}", spec.name));
+        self.check_fail("create")?;
+
+        self.containers.write().unwrap().insert(
+            spec.name.to_string(),
+            MockContainer {
+                name: spec.name.to_string(),
+                state: ContainerState::Stopped,
+                spec: Some(MockContainerSpec {
+                    image: spec.image.to_string(),
+                    ports: spec.ports.to_vec(),
+                    env: spec.env.to_vec(),
+                }),
+            },
+        );
+        Ok(())
+    }
+
+    fn remove_container(&self, name: &str) -> Result<()> {
+        self.record_command(&format!("remove:{}", name));
+        self.check_fail("remove")?;
+
+        self.containers.write().unwrap().remove(name);
+        Ok(())
+    }
+
+    fn exec_shell(&self, container: &str, _workdir: Option<&Path>) -> Result<()> {
+        self.record_command(&format!("exec_shell:{}", container));
+        self.check_fail("exec_shell")?;
+        Ok(())
+    }
+
+    fn is_command_available(&self, cmd: &str) -> bool {
+        self.record_command(&format!("is_available:{}", cmd));
+        true
+    }
+
+    fn build_image(&self, tag: &str, _containerfile: &Path, _context_dir: &Path) -> Result<()> {
+        self.record_command(&format!("build_image:{}", tag));
+        self.check_fail("build_image")?;
+        Ok(())
+    }
+}

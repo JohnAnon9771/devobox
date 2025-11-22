@@ -81,18 +81,57 @@ Centralizar a infraestrutura.
 
 ## 🚀 Instalação
 
+### Método 1: Instalar via Release (Recomendado)
+
 ```bash
-git clone <seu-repo>
-cd devobox
-./install.sh
+# 1. Baixar a última release
+curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64.tar.gz -o devobox.tar.gz
+
+# 2. Extrair o binário
+tar xzf devobox.tar.gz
+
+# 3. Mover para ~/.local/bin
+mkdir -p ~/.local/bin
+mv devobox-linux-x86_64 ~/.local/bin/devobox
+chmod +x ~/.local/bin/devobox
+
+# 4. Garantir que ~/.local/bin está no PATH
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# 5. Verificar instalação
+devobox --version
+
+# 6. Configurar ambiente
+devobox agent install
+devobox builder build
 ```
 
-O instalador irá:
+### Método 2: Compilar do Código Fonte
 
-1. Verificar se Podman está instalado
-2. Copiar arquivos de configuração para `~/.config/devobox`
-3. Criar link simbólico em `~/.local/bin/devobox`
-4. Construir os containers (devobox, postgres, redis)
+```bash
+# 1. Clonar repositório
+git clone https://github.com/JohnAnon9771/devobox.git
+cd devobox
+
+# 2. Compilar
+cargo build --release
+
+# 3. Instalar
+install -Dm755 ./target/release/devobox ~/.local/bin/devobox
+
+# 4. Configurar ambiente
+devobox agent install
+devobox builder build
+```
+
+### Após a Instalação
+
+A própria CLI cuida da preparação do ambiente:
+
+1. Copia os templates (`Containerfile` e `databases.yml`) para `~/.config/devobox` (somente se não existirem)
+2. Verifica dependências básicas (ex.: Podman) via `devobox agent doctor`
+3. Constrói a imagem base e recria os containers (devobox + bancos definidos no `databases.yml`)
 
 ## 🛠️ Comandos
 
@@ -153,14 +192,12 @@ devobox db ls  # alias
 
 ```
 devobox/
-├── bin/
-│   └── devobox          → Script CLI
 ├── config/
 │   ├── Containerfile    → Definição da imagem
-│   └── Makefile         → Build dos containers
+│   └── databases.yml    → Bancos de dados de exemplo (YAML)
 ├── docs/
 │   └── architecture.png → Diagrama de arquitetura
-└── install.sh           → Instalador
+└── Cargo.toml           → Crate Rust do CLI `devobox`
 ```
 
 ### Pós-Instalação
@@ -169,10 +206,9 @@ devobox/
 ~/code/                  → Seus projetos (mapeado para /home/dev/code)
 ~/.config/devobox/       → Configuração instalada
   ├── Containerfile      → Definição da imagem
-  ├── Makefile           → Build dos containers
-  └── devobox            → Script CLI
+  └── databases.yml      → Bancos de dados em YAML
 ~/.local/bin/
-  └── devobox            → Symlink para ~/.config/devobox/devobox
+  └── devobox            → Binário Rust
 ```
 
 **Importante:** Seus projetos devem estar em `~/code` para serem acessíveis dentro do container.
@@ -342,7 +378,7 @@ devobox down
 - ✅ **Projetos**: Persistem via bind mount `~/code` (seus arquivos no host)
 - ⚠️ **Histórico bash**: NÃO persiste (perdido ao executar `rebuild`)
 - ⚠️ **Bancos de dados**: Persistem entre restarts (`down`/`up`), mas são **perdidos** ao executar `rebuild`
-- 💡 **Dica**: Para persistência permanente de dados de banco, adicione volumes nomeados no Makefile
+- 💡 **Dica**: Para persistência permanente de dados de banco, declare volumes nomeados no `databases.yml`
 
 ## ⚙️ Customização
 
@@ -364,10 +400,14 @@ devobox rebuild
 
 ### Adicionar Novos Bancos de Dados
 
-1. Edite `~/.config/devobox/databases.conf` e adicione uma linha no formato `nome|imagem|ports|variaveis_de_ambiente`:
+1. Edite `~/.config/devobox/databases.yml` e adicione entradas YAML com `name`, `image`, `ports` e `env` (opcionais):
 
-```
-mongodb|docker.io/mongo:7|27017:27017|
+```yaml
+databases:
+  - name: mongodb
+    image: docker.io/mongo:7
+    ports: ["27017:27017"]
+    env: []
 ```
 
 2. Reconstrua:
