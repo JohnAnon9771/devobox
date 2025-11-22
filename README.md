@@ -364,22 +364,13 @@ devobox rebuild
 
 ### Adicionar Novos Bancos de Dados
 
-1. Edite `~/.config/devobox/Makefile` e adicione:
+1. Edite `~/.config/devobox/databases.conf` e adicione uma linha no formato `nome|imagem|ports|variaveis_de_ambiente`:
 
-```makefile
-@echo "🔥 Criando MongoDB (Parado)..."
-@podman create --name mongodb \
-    -p 27017:27017 \
-    docker.io/mongo:7
+```
+mongodb|docker.io/mongo:7|27017:27017|
 ```
 
-2. Edite `~/.config/devobox/devobox` e atualize:
-
-```bash
-DATABASES=("postgres" "redis" "mongodb")
-```
-
-3. Reconstrua:
+2. Reconstrua:
 
 ```bash
 devobox rebuild
