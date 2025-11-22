@@ -233,6 +233,11 @@ case "$1" in
         # Test if directory exists in container, fallback to default
         podman exec devobox test -d "$WORK_DIR" 2>/dev/null || WORK_DIR="/home/dev/code"
         podman exec -it -w "$WORK_DIR" devobox bash
+        exit_code=$?
+        echo -e "${BLUE}💤 Encerrando Devobox e bancos após sair do shell...${NC}"
+        stop_all_dbs
+        podman stop devobox >/dev/null 2>&1 || true
+        exit $exit_code
         ;;
 
     db)
