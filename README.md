@@ -4,7 +4,7 @@
 
 ![Arquitetura Devobox](docs/architecture.png)
 
-> _"Eu uso Arch Linux atualizado, mas meu ambiente de desenvolvimento é congelado, estável, reproduzível e não interfere no meu sistema operacional, rodando na velocidade máxima do hardware."_
+> _Desenvolva sem poluir seu sistema, sem perder performance e sem reinventar o ambiente a cada projeto._
 
 ## 🎯 O Problema
 
