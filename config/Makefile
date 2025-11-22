@@ -4,7 +4,7 @@ all: build
 
 build:
 	@echo "🏗️  Construindo imagem Devobox (Arch)..."
-	@podman build -t devobox-img -f config/Containerfile .
+	@podman build -t devobox-img -f Containerfile .
 
 	@echo "🐘 Criando Postgres (Parado)..."
 	@podman rm -f postgres 2>/dev/null || true

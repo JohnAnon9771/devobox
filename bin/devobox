@@ -3,14 +3,14 @@ set -e
 
 CONFIG_DIR="$HOME/.config/devobox"
 
-# Cores
+# Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Lista de bancos disponíveis
+# Available databases list
 DATABASES=("postgres" "redis")
 
 show_help() {
@@ -120,7 +120,7 @@ show_db_status() {
 
 case "$1" in
     shell|enter)
-        # Verifica se deve iniciar os DBs
+        # Check if should start databases
         if [ "$2" = "--with-dbs" ]; then
             start_all_dbs
         fi
@@ -130,8 +130,10 @@ case "$1" in
              podman start devobox >/dev/null
         fi
         echo -e "${GREEN}🚀 Entrando no Devobox...${NC}"
-        # Mapeia o diretório atual do host para dentro do container
+        # Map current host directory to container path
         WORK_DIR=$(pwd | sed "s|$HOME|/home/dev|")
+        # Test if directory exists in container, fallback to default
+        podman exec devobox test -d "$WORK_DIR" 2>/dev/null || WORK_DIR="/home/dev/code"
         podman exec -it -w "$WORK_DIR" devobox bash
         ;;
 
@@ -182,7 +184,7 @@ case "$1" in
         ;;
 
     status)
-        podman ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E 'devobox|dev-'
+        podman ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E 'devobox|postgres|redis'
         ;;
 
     rebuild)

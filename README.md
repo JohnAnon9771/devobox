@@ -101,6 +101,8 @@ O instalador irá:
 ```bash
 # Entrar no ambiente de desenvolvimento
 devobox shell
+# ou
+devobox enter  # alias
 
 # Entrar no ambiente com bancos de dados já iniciados
 devobox shell --with-dbs
@@ -117,6 +119,8 @@ devobox status
 # Reconstruir a imagem do zero
 devobox rebuild
 ```
+
+> **💡 Dica:** O comando `shell` mapeia automaticamente seu diretório atual. Se você executar `devobox shell` de dentro de `~/code/projeto1`, você já inicia em `/home/dev/code/projeto1` dentro do container!
 
 ### Gerenciamento de Bancos de Dados
 
@@ -139,16 +143,36 @@ devobox db restart [postgres|redis]
 
 # Ver status dos bancos
 devobox db status
+# ou
+devobox db ls  # alias
 ```
 
 ## 📁 Estrutura de Diretórios
 
+### No Repositório (antes da instalação)
+
 ```
-~/code/              → Mapeado para /home/dev/code no container
-~/.config/devobox/   → Arquivos de configuração
-  ├── Containerfile  → Definição da imagem
-  ├── Makefile       → Build dos containers
-  └── devobox        → Script CLI
+devobox/
+├── bin/
+│   └── devobox          → Script CLI
+├── config/
+│   ├── Containerfile    → Definição da imagem
+│   └── Makefile         → Build dos containers
+├── docs/
+│   └── architecture.png → Diagrama de arquitetura
+└── install.sh           → Instalador
+```
+
+### Pós-Instalação
+
+```
+~/code/                  → Seus projetos (mapeado para /home/dev/code)
+~/.config/devobox/       → Configuração instalada
+  ├── Containerfile      → Definição da imagem
+  ├── Makefile           → Build dos containers
+  └── devobox            → Script CLI
+~/.local/bin/
+  └── devobox            → Symlink para ~/.config/devobox/devobox
 ```
 
 **Importante:** Seus projetos devem estar em `~/code` para serem acessíveis dentro do container.
