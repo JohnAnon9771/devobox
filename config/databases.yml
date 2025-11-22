@@ -1,0 +1,33 @@
+# Lista opcional de bancos para o Devobox.
+# Exemplos prontos para Postgres e Redis, ajuste conforme seu fluxo.
+#
+# Formatos aceitos:
+#
+# 1) Raiz com chave "databases":
+# databases:
+#   - name: pg
+#     image: postgres:15
+#     ports: ["5432:5432"]
+#     env:
+#       - POSTGRES_PASSWORD=dev
+#
+# 2) Lista direta:
+# - name: redis
+#   image: docker.io/redis:7
+#   ports:
+#     - "6379:6379"
+#   env: []
+
+databases:
+  - name: pg
+    image: postgres:15
+    ports: ["5432:5432"]
+    env:
+      - POSTGRES_PASSWORD=dev
+    volumes:
+      - devobox_pg:/var/lib/postgresql/data
+  - name: redis
+    image: docker.io/redis:7
+    ports: ["6379:6379"]
+    env: []
+    volumes: []
