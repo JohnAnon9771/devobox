@@ -168,4 +168,28 @@ impl ContainerRuntime for MockRuntime {
         self.check_fail("build_image")?;
         Ok(())
     }
+
+    fn prune_containers(&self) -> Result<()> {
+        self.record_command("prune:containers");
+        self.check_fail("prune_containers")?;
+        Ok(())
+    }
+
+    fn prune_images(&self) -> Result<()> {
+        self.record_command("prune:images");
+        self.check_fail("prune_images")?;
+        Ok(())
+    }
+
+    fn prune_volumes(&self) -> Result<()> {
+        self.record_command("prune:volumes");
+        self.check_fail("prune_volumes")?;
+        Ok(())
+    }
+
+    fn prune_build_cache(&self) -> Result<()> {
+        self.record_command("prune:build_cache");
+        self.check_fail("prune_build_cache")?;
+        Ok(())
+    }
 }

@@ -1,3 +1,3 @@
 mod container_service;
 
-pub use container_service::{ContainerService, DatabaseService};
+pub use container_service::{CleanupOptions, ContainerService, DatabaseService};

@@ -3,7 +3,7 @@ use clap::{Args, Subcommand};
 use devobox::domain::Database;
 use devobox::infra::PodmanAdapter;
 use devobox::infra::config::load_databases;
-use devobox::services::{ContainerService, DatabaseService};
+use devobox::services::{CleanupOptions, ContainerService, DatabaseService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -31,6 +31,24 @@ pub enum RuntimeAction {
     Db {
         #[command(subcommand)]
         action: DbAction,
+    },
+    /// Limpa recursos não utilizados do Podman
+    Cleanup {
+        /// Limpar apenas containers parados
+        #[arg(long)]
+        containers: bool,
+        /// Limpar apenas imagens não utilizadas
+        #[arg(long)]
+        images: bool,
+        /// Limpar apenas volumes órfãos
+        #[arg(long)]
+        volumes: bool,
+        /// Limpar apenas cache de build
+        #[arg(long)]
+        build_cache: bool,
+        /// Limpar tudo (padrão se nenhuma flag especificada)
+        #[arg(long)]
+        all: bool,
     },
 }
 
@@ -141,6 +159,10 @@ impl Runtime {
         names.extend(self.databases.iter().map(|db| db.name.clone()));
         names
     }
+
+    fn cleanup(&self, options: &CleanupOptions) -> Result<()> {
+        self.container_service.cleanup(options)
+    }
 }
 
 pub fn run(cmd: RuntimeCommand, config_dir: &Path) -> Result<()> {
@@ -175,6 +197,29 @@ pub fn run(cmd: RuntimeCommand, config_dir: &Path) -> Result<()> {
             },
             DbAction::Status => runtime.status(),
         },
+        RuntimeAction::Cleanup {
+            containers,
+            images,
+            volumes,
+            build_cache,
+            all,
+        } => {
+            // Se nenhuma flag específica foi fornecida, ou se --all foi especificado, limpa tudo
+            let cleanup_all = all || (!containers && !images && !volumes && !build_cache);
+
+            let options = if cleanup_all {
+                CleanupOptions::all()
+            } else {
+                CleanupOptions {
+                    containers,
+                    images,
+                    volumes,
+                    build_cache,
+                }
+            };
+
+            runtime.cleanup(&options)
+        }
     }
 }
 
