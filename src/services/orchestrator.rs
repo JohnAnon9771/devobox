@@ -2,11 +2,7 @@ use crate::services::{ContainerService, SystemService};
 use anyhow::Result;
 use std::sync::Arc;
 
-/// Orquestrador central para workflows complexos
-///
-/// Combina ContainerService e SystemService para implementar
-/// workflows de alto nível que envolvem múltiplos containers
-/// e operações de sistema.
+/// Orchestrates complex workflows involving multiple containers and system operations
 pub struct Orchestrator {
     container_service: Arc<ContainerService>,
     system_service: Arc<SystemService>,
@@ -51,14 +47,7 @@ impl Orchestrator {
         }
     }
 
-    /// Para todos os containers da lista, ignorando erros individuais.
-    /// Continua tentando parar todos mesmo se algum falhar.
-    ///
-    /// # Arguments
-    /// * `container_names` - Lista de nomes dos containers a serem parados
-    ///
-    /// # Returns
-    /// Ok se a operação foi tentada para todos (mesmo com falhas individuais)
+    /// Stops all containers in the list, continuing even if individual operations fail
     pub fn stop_all(&self, container_names: &[String]) -> Result<()> {
         if container_names.is_empty() {
             return Ok(());
@@ -78,14 +67,7 @@ impl Orchestrator {
         Ok(())
     }
 
-    /// Inicia todos os containers da lista, ignorando erros individuais.
-    /// Continua tentando iniciar todos mesmo se algum falhar.
-    ///
-    /// # Arguments
-    /// * `container_names` - Lista de nomes dos containers a serem iniciados
-    ///
-    /// # Returns
-    /// Ok se a operação foi tentada para todos (mesmo com falhas individuais)
+    /// Starts all containers in the list, continuing even if individual operations fail
     pub fn start_all(&self, container_names: &[String]) -> Result<()> {
         if container_names.is_empty() {
             return Ok(());
@@ -105,14 +87,7 @@ impl Orchestrator {
         Ok(())
     }
 
-    /// Executa limpeza de recursos do Podman baseado nas opções fornecidas.
-    /// Continua tentando limpar todos os recursos selecionados mesmo se algum falhar.
-    ///
-    /// # Arguments
-    /// * `options` - Opções de limpeza (quais recursos limpar)
-    ///
-    /// # Returns
-    /// Ok se a operação foi tentada (mesmo com falhas individuais)
+    /// Cleans up Podman resources based on options, continuing even if individual operations fail
     pub fn cleanup(&self, options: &CleanupOptions) -> Result<()> {
         println!("🧹 Limpando recursos do Podman...");
 
@@ -375,16 +350,12 @@ mod tests {
     fn test_cleanup_continues_on_individual_failures() {
         let (orchestrator, mock) = create_test_orchestrator();
 
-        // Configura falha no prune de imagens
         mock.set_fail_on("prune_images");
 
         let options = CleanupOptions::all();
 
-        // Cleanup não deve falhar completamente
         let result = orchestrator.cleanup(&options);
         assert!(result.is_ok());
-
-        // Outros comandos de prune devem ter sido executados
         let commands = mock.get_commands();
         assert!(commands.contains(&"prune:containers".to_string()));
         assert!(commands.contains(&"prune:volumes".to_string()));

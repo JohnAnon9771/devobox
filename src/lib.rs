@@ -1,4 +1,3 @@
-// Public API for devobox library
 pub mod domain;
 pub mod infra;
 pub mod services;

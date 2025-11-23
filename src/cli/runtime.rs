@@ -181,7 +181,7 @@ impl Runtime {
             .container_service
             .exec_shell("devobox", workdir.as_deref());
 
-        // Para todos os containers ao sair se auto_stop estiver ativado
+        // Stop all containers on exit if auto_stop is enabled
         if auto_stop {
             self.stop_all_containers()?;
         }
@@ -248,7 +248,7 @@ pub fn run(cmd: RuntimeCommand, config_dir: &Path) -> Result<()> {
             build_cache,
             all,
         } => {
-            // Se nenhuma flag específica foi fornecida, ou se --all foi especificado, limpa tudo
+            // If no specific flag was provided, or if --all was specified, clean everything
             let cleanup_all = all || (!containers && !images && !volumes && !build_cache);
 
             let options = if cleanup_all {

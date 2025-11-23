@@ -147,17 +147,10 @@ impl ContainerRuntime for PodmanAdapter {
     }
 
     fn prune_build_cache(&self) -> Result<()> {
-        // Podman usa buildah internamente, então tentamos limpar o cache
-        // Se o comando falhar (não disponível), ignoramos silenciosamente
         let status = podman_status(["builder", "prune", "-af"], "limpando cache de build");
-
-        // Ignora erro se o comando não existir
         match status {
             Ok(_) => Ok(()),
-            Err(_) => {
-                // Builder prune pode não estar disponível em todas versões
-                Ok(())
-            }
+            Err(_) => Ok(()),
         }
     }
 }

@@ -1,4 +1,3 @@
-// Test utilities and mocks
 use crate::domain::{Container, ContainerRuntime, ContainerSpec, ContainerState};
 use anyhow::{Result, bail};
 use std::collections::HashMap;

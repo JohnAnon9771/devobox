@@ -1,4 +1,3 @@
-// Integration tests
 use devobox::domain::{ContainerSpec, Database};
 
 #[test]

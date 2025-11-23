@@ -59,13 +59,12 @@ fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
         );
     }
 
-    // Limpeza pré-build (remove recursos antigos antes de construir)
     if !skip_cleanup {
         let orchestrator = Orchestrator::new(container_service.clone(), system_service.clone());
         let cleanup_options = CleanupOptions {
             containers: true,
             images: true,
-            volumes: false, // Preserva volumes de dados
+            volumes: false,
             build_cache: true,
         };
         let _ = orchestrator.cleanup(&cleanup_options);

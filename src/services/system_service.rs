@@ -3,10 +3,7 @@ use anyhow::Result;
 use std::path::Path;
 use std::sync::Arc;
 
-/// Service para operações de sistema/infraestrutura do Podman
-///
-/// Responsável por operações que afetam o sistema Podman como um todo,
-/// não containers específicos (build, prune, etc).
+/// System-wide Podman operations (build, prune)
 pub struct SystemService {
     runtime: Arc<dyn ContainerRuntime>,
 }
@@ -16,27 +13,22 @@ impl SystemService {
         Self { runtime }
     }
 
-    /// Constrói uma imagem Docker/Podman
     pub fn build_image(&self, tag: &str, containerfile: &Path, context: &Path) -> Result<()> {
         self.runtime.build_image(tag, containerfile, context)
     }
 
-    /// Remove containers parados (system-wide)
     pub fn prune_containers(&self) -> Result<()> {
         self.runtime.prune_containers()
     }
 
-    /// Remove imagens não utilizadas (system-wide)
     pub fn prune_images(&self) -> Result<()> {
         self.runtime.prune_images()
     }
 
-    /// Remove volumes órfãos (system-wide)
     pub fn prune_volumes(&self) -> Result<()> {
         self.runtime.prune_volumes()
     }
 
-    /// Limpa cache de build (system-wide)
     pub fn prune_build_cache(&self) -> Result<()> {
         self.runtime.prune_build_cache()
     }

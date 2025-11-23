@@ -180,7 +180,6 @@ mod tests {
         let result = service.stop("test");
         assert!(result.is_ok());
 
-        // Should not call stop on already stopped container
         let commands = mock.get_commands();
         assert!(!commands.contains(&"stop:test".to_string()));
     }
@@ -193,7 +192,6 @@ mod tests {
         let result = service.start("test");
         assert!(result.is_ok());
 
-        // Should not call start on already running container
         let commands = mock.get_commands();
         assert!(!commands.contains(&"start:test".to_string()));
     }
@@ -203,7 +201,7 @@ mod tests {
         let (service, _mock) = create_test_service();
 
         let result = service.start("missing");
-        assert!(result.is_ok()); // Should not fail, just print warning
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -229,7 +227,6 @@ mod tests {
         let (service, mock) = create_test_service();
         mock.add_container("test", ContainerState::Stopped);
 
-        // Start -> Stop -> Start sequence
         assert!(service.start("test").is_ok());
         assert_eq!(mock.get_state("test"), Some(ContainerState::Running));
 
