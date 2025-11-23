@@ -1,9 +1,9 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use devobox::domain::Database;
 use devobox::infra::PodmanAdapter;
 use devobox::infra::config::load_databases;
-use devobox::services::{CleanupOptions, ContainerService, DatabaseService};
+use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -20,6 +20,9 @@ pub enum RuntimeAction {
         /// Inicializa bancos antes de entrar
         #[arg(long)]
         with_dbs: bool,
+        /// Para todos os containers ao sair do shell
+        #[arg(long)]
+        auto_stop: bool,
     },
     /// Sobe devobox e todos os bancos configurados
     Up,
@@ -63,19 +66,22 @@ pub enum DbAction {
 struct Runtime {
     config_dir: PathBuf,
     databases: Vec<Database>,
-    container_service: ContainerService,
-    db_service: DatabaseService,
+    container_service: Arc<ContainerService>,
+    orchestrator: Orchestrator,
 }
 
 impl Runtime {
     fn new(config_dir: &Path) -> Result<Self> {
         let databases = load_databases(config_dir)?;
         let runtime = Arc::new(PodmanAdapter::new());
+        let container_service = Arc::new(ContainerService::new(runtime.clone()));
+        let system_service = Arc::new(SystemService::new(runtime));
+        let orchestrator = Orchestrator::new(container_service.clone(), system_service);
         Ok(Self {
             config_dir: config_dir.to_path_buf(),
             databases,
-            container_service: ContainerService::new(runtime.clone()),
-            db_service: DatabaseService::new(runtime),
+            container_service,
+            orchestrator,
         })
     }
 
@@ -88,7 +94,8 @@ impl Runtime {
             println!("⚠️  Nenhum banco configurado em {:?}", self.config_dir);
             return Ok(());
         }
-        self.db_service.start_all(&self.databases)
+        let db_names: Vec<String> = self.databases.iter().map(|db| db.name.clone()).collect();
+        self.orchestrator.start_all(&db_names)
     }
 
     fn stop_all_dbs(&self) -> Result<()> {
@@ -96,23 +103,44 @@ impl Runtime {
             println!("⚠️  Nenhum banco configurado em {:?}", self.config_dir);
             return Ok(());
         }
-        self.db_service.stop_all(&self.databases)
+        let db_names: Vec<String> = self.databases.iter().map(|db| db.name.clone()).collect();
+        self.orchestrator.stop_all(&db_names)
     }
 
     fn restart_all_dbs(&self) -> Result<()> {
-        self.db_service.restart_all(&self.databases)
+        if self.databases.is_empty() {
+            println!("⚠️  Nenhum banco configurado");
+            return Ok(());
+        }
+        let db_names: Vec<String> = self.databases.iter().map(|db| db.name.clone()).collect();
+        self.orchestrator.stop_all(&db_names)?;
+        self.orchestrator.start_all(&db_names)
     }
 
     fn start_db(&self, service: &str) -> Result<()> {
-        self.db_service.start(service, &self.databases)
+        if !self.is_known_db(service) {
+            bail!("Banco '{service}' não está listado em databases.yml");
+        }
+        self.container_service.start(service)
     }
 
     fn stop_db(&self, service: &str) -> Result<()> {
-        self.db_service.stop(service, &self.databases)
+        if !self.is_known_db(service) {
+            bail!("Banco '{service}' não está listado em databases.yml");
+        }
+        self.container_service.stop(service)
     }
 
     fn restart_db(&self, service: &str) -> Result<()> {
-        self.db_service.restart(service, &self.databases)
+        if !self.is_known_db(service) {
+            bail!("Banco '{service}' não está listado em databases.yml");
+        }
+        self.container_service.stop(service)?;
+        self.container_service.start(service)
+    }
+
+    fn is_known_db(&self, name: &str) -> bool {
+        self.databases.iter().any(|db| db.name == name)
     }
 
     fn status(&self) -> Result<()> {
@@ -140,7 +168,7 @@ impl Runtime {
         Ok(())
     }
 
-    fn shell(&self, with_dbs: bool) -> Result<()> {
+    fn shell(&self, with_dbs: bool, auto_stop: bool) -> Result<()> {
         if with_dbs {
             self.start_all_dbs()?;
         }
@@ -149,8 +177,21 @@ impl Runtime {
 
         let workdir = container_workdir()?;
         println!("🚀 Entrando no devobox (workdir {:?})", workdir);
-        self.container_service
-            .exec_shell("devobox", workdir.as_deref())
+        let result = self
+            .container_service
+            .exec_shell("devobox", workdir.as_deref());
+
+        // Para todos os containers ao sair se auto_stop estiver ativado
+        if auto_stop {
+            self.stop_all_containers()?;
+        }
+
+        result
+    }
+
+    fn stop_all_containers(&self) -> Result<()> {
+        let containers = self.all_containers();
+        self.orchestrator.stop_all(&containers)
     }
 
     fn all_containers(&self) -> Vec<String> {
@@ -161,7 +202,7 @@ impl Runtime {
     }
 
     fn cleanup(&self, options: &CleanupOptions) -> Result<()> {
-        self.container_service.cleanup(options)
+        self.orchestrator.cleanup(options)
     }
 }
 
@@ -169,7 +210,10 @@ pub fn run(cmd: RuntimeCommand, config_dir: &Path) -> Result<()> {
     let runtime = Runtime::new(config_dir)?;
 
     match cmd.command {
-        RuntimeAction::Shell { with_dbs } => runtime.shell(with_dbs),
+        RuntimeAction::Shell {
+            with_dbs,
+            auto_stop,
+        } => runtime.shell(with_dbs, auto_stop),
         RuntimeAction::Up => {
             runtime.start_all_dbs()?;
             runtime.ensure_dev_container()

@@ -8,4 +8,4 @@ pub mod test_support;
 
 pub use domain::{Container, ContainerRuntime, ContainerSpec, ContainerState, Database};
 pub use infra::PodmanAdapter;
-pub use services::{CleanupOptions, ContainerService, DatabaseService};
+pub use services::{CleanupOptions, ContainerService, Orchestrator, SystemService};

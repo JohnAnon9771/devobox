@@ -1,38 +1,10 @@
-use crate::domain::{ContainerRuntime, ContainerSpec, ContainerState, Database};
+use crate::domain::{ContainerRuntime, ContainerSpec, ContainerState};
 use anyhow::{Result, bail};
 use std::path::Path;
 use std::sync::Arc;
 
 pub struct ContainerService {
     runtime: Arc<dyn ContainerRuntime>,
-}
-
-#[derive(Debug, Clone)]
-pub struct CleanupOptions {
-    pub containers: bool,
-    pub images: bool,
-    pub volumes: bool,
-    pub build_cache: bool,
-}
-
-impl CleanupOptions {
-    pub fn all() -> Self {
-        Self {
-            containers: true,
-            images: true,
-            volumes: true,
-            build_cache: true,
-        }
-    }
-
-    pub fn none() -> Self {
-        Self {
-            containers: false,
-            images: false,
-            volumes: false,
-            build_cache: false,
-        }
-    }
 }
 
 impl ContainerService {
@@ -104,113 +76,6 @@ impl ContainerService {
 
     pub fn is_command_available(&self, cmd: &str) -> bool {
         self.runtime.is_command_available(cmd)
-    }
-
-    pub fn build_image(&self, tag: &str, containerfile: &Path, context_dir: &Path) -> Result<()> {
-        self.runtime.build_image(tag, containerfile, context_dir)
-    }
-
-    pub fn cleanup(&self, options: &CleanupOptions) -> Result<()> {
-        println!("🧹 Limpando recursos do Podman...");
-
-        if options.containers {
-            print!("  ⏳ Removendo containers parados...");
-            match self.runtime.prune_containers() {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
-            }
-        }
-
-        if options.images {
-            print!("  ⏳ Removendo imagens não utilizadas...");
-            match self.runtime.prune_images() {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
-            }
-        }
-
-        if options.volumes {
-            print!("  ⏳ Removendo volumes órfãos...");
-            match self.runtime.prune_volumes() {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
-            }
-        }
-
-        if options.build_cache {
-            print!("  ⏳ Limpando cache de build...");
-            match self.runtime.prune_build_cache() {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
-            }
-        }
-
-        println!("✨ Limpeza concluída!");
-        Ok(())
-    }
-}
-
-pub struct DatabaseService {
-    container_service: ContainerService,
-}
-
-impl DatabaseService {
-    pub fn new(runtime: Arc<dyn ContainerRuntime>) -> Self {
-        Self {
-            container_service: ContainerService::new(runtime),
-        }
-    }
-
-    pub fn start_all(&self, databases: &[Database]) -> Result<()> {
-        if databases.is_empty() {
-            println!("⚠️  Nenhum banco configurado");
-            return Ok(());
-        }
-
-        for db in databases {
-            self.container_service.start(&db.name)?;
-        }
-        Ok(())
-    }
-
-    pub fn stop_all(&self, databases: &[Database]) -> Result<()> {
-        if databases.is_empty() {
-            println!("⚠️  Nenhum banco configurado");
-            return Ok(());
-        }
-
-        for db in databases {
-            self.container_service.stop(&db.name)?;
-        }
-        Ok(())
-    }
-
-    pub fn restart_all(&self, databases: &[Database]) -> Result<()> {
-        self.stop_all(databases)?;
-        self.start_all(databases)
-    }
-
-    pub fn start(&self, name: &str, databases: &[Database]) -> Result<()> {
-        if !self.is_known_db(name, databases) {
-            bail!("Banco '{name}' não está listado em databases.yml");
-        }
-        self.container_service.start(name)
-    }
-
-    pub fn stop(&self, name: &str, databases: &[Database]) -> Result<()> {
-        if !self.is_known_db(name, databases) {
-            bail!("Banco '{name}' não está listado em databases.yml");
-        }
-        self.container_service.stop(name)
-    }
-
-    pub fn restart(&self, name: &str, databases: &[Database]) -> Result<()> {
-        self.stop(name, databases)?;
-        self.start(name, databases)
-    }
-
-    fn is_known_db(&self, name: &str, databases: &[Database]) -> bool {
-        databases.iter().any(|db| db.name == name)
     }
 }
 
@@ -308,77 +173,6 @@ mod tests {
     }
 
     #[test]
-    fn test_database_service_start_all() {
-        let mock = Arc::new(MockRuntime::new());
-        mock.add_container("db1", ContainerState::Stopped);
-        mock.add_container("db2", ContainerState::Stopped);
-
-        let service = DatabaseService::new(mock.clone());
-        let databases = vec![
-            Database {
-                name: "db1".to_string(),
-                image: "postgres:15".to_string(),
-                ports: vec![],
-                env: vec![],
-                volumes: vec![],
-            },
-            Database {
-                name: "db2".to_string(),
-                image: "redis:7".to_string(),
-                ports: vec![],
-                env: vec![],
-                volumes: vec![],
-            },
-        ];
-
-        let result = service.start_all(&databases);
-        assert!(result.is_ok());
-
-        assert_eq!(mock.get_state("db1"), Some(ContainerState::Running));
-        assert_eq!(mock.get_state("db2"), Some(ContainerState::Running));
-    }
-
-    #[test]
-    fn test_database_service_validates_known_database() {
-        let mock = Arc::new(MockRuntime::new());
-        let service = DatabaseService::new(mock);
-
-        let databases = vec![Database {
-            name: "db1".to_string(),
-            image: "postgres:15".to_string(),
-            ports: vec![],
-            env: vec![],
-            volumes: vec![],
-        }];
-
-        let result = service.start("unknown", &databases);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("não está listado"));
-    }
-
-    #[test]
-    fn test_database_service_restart() {
-        let mock = Arc::new(MockRuntime::new());
-        mock.add_container("db1", ContainerState::Running);
-
-        let service = DatabaseService::new(mock.clone());
-        let databases = vec![Database {
-            name: "db1".to_string(),
-            image: "postgres:15".to_string(),
-            ports: vec![],
-            env: vec![],
-            volumes: vec![],
-        }];
-
-        let result = service.restart("db1", &databases);
-        assert!(result.is_ok());
-
-        let commands = mock.get_commands();
-        assert!(commands.contains(&"stop:db1".to_string()));
-        assert!(commands.contains(&"start:db1".to_string()));
-    }
-
-    #[test]
     fn test_stop_already_stopped_container() {
         let (service, mock) = create_test_service();
         mock.add_container("test", ContainerState::Stopped);
@@ -410,50 +204,6 @@ mod tests {
 
         let result = service.start("missing");
         assert!(result.is_ok()); // Should not fail, just print warning
-    }
-
-    #[test]
-    fn test_database_service_stop_all() {
-        let mock = Arc::new(MockRuntime::new());
-        mock.add_container("db1", ContainerState::Running);
-        mock.add_container("db2", ContainerState::Running);
-
-        let service = DatabaseService::new(mock.clone());
-        let databases = vec![
-            Database {
-                name: "db1".to_string(),
-                image: "postgres:15".to_string(),
-                ports: vec![],
-                env: vec![],
-                volumes: vec![],
-            },
-            Database {
-                name: "db2".to_string(),
-                image: "redis:7".to_string(),
-                ports: vec![],
-                env: vec![],
-                volumes: vec![],
-            },
-        ];
-
-        let result = service.stop_all(&databases);
-        assert!(result.is_ok());
-
-        assert_eq!(mock.get_state("db1"), Some(ContainerState::Stopped));
-        assert_eq!(mock.get_state("db2"), Some(ContainerState::Stopped));
-    }
-
-    #[test]
-    fn test_database_service_with_empty_list() {
-        let mock = Arc::new(MockRuntime::new());
-        let service = DatabaseService::new(mock);
-        let databases = vec![];
-
-        let result = service.start_all(&databases);
-        assert!(result.is_ok());
-
-        let result = service.stop_all(&databases);
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -498,95 +248,5 @@ mod tests {
             commands.iter().filter(|c| c.starts_with("stop:")).count(),
             1
         );
-    }
-
-    #[test]
-    fn test_cleanup_all() {
-        let (service, mock) = create_test_service();
-        let options = CleanupOptions::all();
-
-        let result = service.cleanup(&options);
-        assert!(result.is_ok());
-
-        let commands = mock.get_commands();
-        assert!(commands.contains(&"prune:containers".to_string()));
-        assert!(commands.contains(&"prune:images".to_string()));
-        assert!(commands.contains(&"prune:volumes".to_string()));
-        assert!(commands.contains(&"prune:build_cache".to_string()));
-    }
-
-    #[test]
-    fn test_cleanup_selective_containers_only() {
-        let (service, mock) = create_test_service();
-        let options = CleanupOptions {
-            containers: true,
-            images: false,
-            volumes: false,
-            build_cache: false,
-        };
-
-        let result = service.cleanup(&options);
-        assert!(result.is_ok());
-
-        let commands = mock.get_commands();
-        assert!(commands.contains(&"prune:containers".to_string()));
-        assert!(!commands.contains(&"prune:images".to_string()));
-        assert!(!commands.contains(&"prune:volumes".to_string()));
-        assert!(!commands.contains(&"prune:build_cache".to_string()));
-    }
-
-    #[test]
-    fn test_cleanup_selective_images_and_cache() {
-        let (service, mock) = create_test_service();
-        let options = CleanupOptions {
-            containers: false,
-            images: true,
-            volumes: false,
-            build_cache: true,
-        };
-
-        let result = service.cleanup(&options);
-        assert!(result.is_ok());
-
-        let commands = mock.get_commands();
-        assert!(!commands.contains(&"prune:containers".to_string()));
-        assert!(commands.contains(&"prune:images".to_string()));
-        assert!(!commands.contains(&"prune:volumes".to_string()));
-        assert!(commands.contains(&"prune:build_cache".to_string()));
-    }
-
-    #[test]
-    fn test_cleanup_none() {
-        let (service, mock) = create_test_service();
-        let options = CleanupOptions::none();
-
-        let result = service.cleanup(&options);
-        assert!(result.is_ok());
-
-        let commands = mock.get_commands();
-        assert!(!commands.contains(&"prune:containers".to_string()));
-        assert!(!commands.contains(&"prune:images".to_string()));
-        assert!(!commands.contains(&"prune:volumes".to_string()));
-        assert!(!commands.contains(&"prune:build_cache".to_string()));
-    }
-
-    #[test]
-    fn test_cleanup_continues_on_individual_failures() {
-        let (service, mock) = create_test_service();
-
-        // Configura falha no prune de imagens
-        mock.set_fail_on("prune_images");
-
-        let options = CleanupOptions::all();
-
-        // Cleanup não deve falhar completamente
-        let result = service.cleanup(&options);
-        assert!(result.is_ok());
-
-        // Outros comandos de prune devem ter sido executados
-        let commands = mock.get_commands();
-        assert!(commands.contains(&"prune:containers".to_string()));
-        assert!(commands.contains(&"prune:volumes".to_string()));
-        assert!(commands.contains(&"prune:build_cache".to_string()));
     }
 }

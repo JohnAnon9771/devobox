@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use devobox::infra::PodmanAdapter;
 use devobox::infra::config::{databases_path, load_databases};
-use devobox::services::{CleanupOptions, ContainerService};
+use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -48,7 +48,8 @@ fn check() -> Result<()> {
 
 fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     let runtime = Arc::new(PodmanAdapter::new());
-    let service = ContainerService::new(runtime);
+    let container_service = Arc::new(ContainerService::new(runtime.clone()));
+    let system_service = Arc::new(SystemService::new(runtime));
     let containerfile = config_dir.join("Containerfile");
 
     if !containerfile.exists() {
@@ -60,18 +61,19 @@ fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
 
     // Limpeza pré-build (remove recursos antigos antes de construir)
     if !skip_cleanup {
+        let orchestrator = Orchestrator::new(container_service.clone(), system_service.clone());
         let cleanup_options = CleanupOptions {
             containers: true,
             images: true,
             volumes: false, // Preserva volumes de dados
             build_cache: true,
         };
-        let _ = service.cleanup(&cleanup_options);
+        let _ = orchestrator.cleanup(&cleanup_options);
     }
 
     let context = config_dir.to_path_buf();
     println!("🏗️  Construindo imagem Devobox (Arch)...");
-    service.build_image("devobox-img", &containerfile, &context)?;
+    system_service.build_image("devobox-img", &containerfile, &context)?;
 
     println!(
         "🗄️  Lendo bancos de dados em {:?}...",
@@ -84,7 +86,7 @@ fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     }
 
     for db in &databases {
-        service.recreate(&db.to_spec())?;
+        container_service.recreate(&db.to_spec())?;
     }
 
     let code_dir = code_mount()?;
@@ -106,7 +108,7 @@ fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
         extra_args: &["-it"],
     };
 
-    service.recreate(&dev_spec)?;
+    container_service.recreate(&dev_spec)?;
     println!("✅ Build concluído! Tudo pronto.");
     Ok(())
 }

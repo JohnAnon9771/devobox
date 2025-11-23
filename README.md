@@ -146,6 +146,10 @@ devobox enter  # alias
 # Entrar no ambiente com bancos de dados já iniciados
 devobox shell --with-dbs
 
+# Entrar e parar TODOS os containers ao sair (economiza recursos automaticamente)
+devobox shell --auto-stop
+devobox shell --with-dbs --auto-stop
+
 # Subir tudo em background
 devobox up
 
@@ -163,6 +167,39 @@ devobox rebuild --skip-cleanup
 ```
 
 > **💡 Dica:** O comando `shell` mapeia automaticamente seu diretório atual. Se você executar `devobox shell` de dentro de `~/code/projeto1`, você já inicia em `/home/dev/code/projeto1` dentro do container!
+
+**Modo Auto-Stop:**
+
+O flag `--auto-stop` encerra **todos os containers** automaticamente quando você sai do shell, liberando recursos do sistema:
+
+```bash
+$ devobox shell --with-dbs --auto-stop
+🔌 Iniciando pg...
+🔌 Iniciando redis...
+🚀 Entrando no devobox (workdir Some("/home/dev/code/myproject"))
+
+# [Você trabalha normalmente]
+
+$ exit
+🧹 Encerrando todos os containers...
+  💤 Parando devobox... ✓
+  💤 Parando pg... ✓
+  💤 Parando redis... ✓
+✅ Containers encerrados
+```
+
+**Quando usar `--auto-stop`:**
+
+- ✅ Sessões rápidas de desenvolvimento
+- ✅ Quando quer economizar RAM/CPU automaticamente
+- ✅ Máquinas com recursos limitados
+- ✅ Trabalho em múltiplos projetos no mesmo dia
+
+**Quando NÃO usar `--auto-stop`:**
+
+- ❌ Sessões longas com múltiplas entradas/saídas
+- ❌ Quando vai voltar ao shell logo em seguida
+- ❌ Múltiplas sessões shell simultâneas (terminais diferentes)
 
 ### Gerenciamento de Bancos de Dados
 
