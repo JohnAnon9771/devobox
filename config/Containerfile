@@ -7,7 +7,8 @@ RUN pacman -Sy --noconfirm archlinux-keyring && \
       libffi zlib openssl readline ncurses libyaml gdbm \
       postgresql-libs redis imagemagick libvips \
       man-db neovim vi vim shadow tmux lazygit \
-      ripgrep fd unzip gzip tar xclip wl-clipboard \
+      ripgrep fd fzf unzip gzip tar xclip wl-clipboard \
+      python python-pip python-pynvim python-virtualenv sqlite \
       cmake iputils iproute2 bind-tools && \
     pacman -Scc --noconfirm
 
