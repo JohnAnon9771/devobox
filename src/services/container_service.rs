@@ -7,6 +7,34 @@ pub struct ContainerService {
     runtime: Arc<dyn ContainerRuntime>,
 }
 
+#[derive(Debug, Clone)]
+pub struct CleanupOptions {
+    pub containers: bool,
+    pub images: bool,
+    pub volumes: bool,
+    pub build_cache: bool,
+}
+
+impl CleanupOptions {
+    pub fn all() -> Self {
+        Self {
+            containers: true,
+            images: true,
+            volumes: true,
+            build_cache: true,
+        }
+    }
+
+    pub fn none() -> Self {
+        Self {
+            containers: false,
+            images: false,
+            volumes: false,
+            build_cache: false,
+        }
+    }
+}
+
 impl ContainerService {
     pub fn new(runtime: Arc<dyn ContainerRuntime>) -> Self {
         Self { runtime }
@@ -80,6 +108,45 @@ impl ContainerService {
 
     pub fn build_image(&self, tag: &str, containerfile: &Path, context_dir: &Path) -> Result<()> {
         self.runtime.build_image(tag, containerfile, context_dir)
+    }
+
+    pub fn cleanup(&self, options: &CleanupOptions) -> Result<()> {
+        println!("🧹 Limpando recursos do Podman...");
+
+        if options.containers {
+            print!("  ⏳ Removendo containers parados...");
+            match self.runtime.prune_containers() {
+                Ok(_) => println!(" ✓"),
+                Err(e) => println!(" ⚠️  Falha: {}", e),
+            }
+        }
+
+        if options.images {
+            print!("  ⏳ Removendo imagens não utilizadas...");
+            match self.runtime.prune_images() {
+                Ok(_) => println!(" ✓"),
+                Err(e) => println!(" ⚠️  Falha: {}", e),
+            }
+        }
+
+        if options.volumes {
+            print!("  ⏳ Removendo volumes órfãos...");
+            match self.runtime.prune_volumes() {
+                Ok(_) => println!(" ✓"),
+                Err(e) => println!(" ⚠️  Falha: {}", e),
+            }
+        }
+
+        if options.build_cache {
+            print!("  ⏳ Limpando cache de build...");
+            match self.runtime.prune_build_cache() {
+                Ok(_) => println!(" ✓"),
+                Err(e) => println!(" ⚠️  Falha: {}", e),
+            }
+        }
+
+        println!("✨ Limpeza concluída!");
+        Ok(())
     }
 }
 
@@ -431,5 +498,95 @@ mod tests {
             commands.iter().filter(|c| c.starts_with("stop:")).count(),
             1
         );
+    }
+
+    #[test]
+    fn test_cleanup_all() {
+        let (service, mock) = create_test_service();
+        let options = CleanupOptions::all();
+
+        let result = service.cleanup(&options);
+        assert!(result.is_ok());
+
+        let commands = mock.get_commands();
+        assert!(commands.contains(&"prune:containers".to_string()));
+        assert!(commands.contains(&"prune:images".to_string()));
+        assert!(commands.contains(&"prune:volumes".to_string()));
+        assert!(commands.contains(&"prune:build_cache".to_string()));
+    }
+
+    #[test]
+    fn test_cleanup_selective_containers_only() {
+        let (service, mock) = create_test_service();
+        let options = CleanupOptions {
+            containers: true,
+            images: false,
+            volumes: false,
+            build_cache: false,
+        };
+
+        let result = service.cleanup(&options);
+        assert!(result.is_ok());
+
+        let commands = mock.get_commands();
+        assert!(commands.contains(&"prune:containers".to_string()));
+        assert!(!commands.contains(&"prune:images".to_string()));
+        assert!(!commands.contains(&"prune:volumes".to_string()));
+        assert!(!commands.contains(&"prune:build_cache".to_string()));
+    }
+
+    #[test]
+    fn test_cleanup_selective_images_and_cache() {
+        let (service, mock) = create_test_service();
+        let options = CleanupOptions {
+            containers: false,
+            images: true,
+            volumes: false,
+            build_cache: true,
+        };
+
+        let result = service.cleanup(&options);
+        assert!(result.is_ok());
+
+        let commands = mock.get_commands();
+        assert!(!commands.contains(&"prune:containers".to_string()));
+        assert!(commands.contains(&"prune:images".to_string()));
+        assert!(!commands.contains(&"prune:volumes".to_string()));
+        assert!(commands.contains(&"prune:build_cache".to_string()));
+    }
+
+    #[test]
+    fn test_cleanup_none() {
+        let (service, mock) = create_test_service();
+        let options = CleanupOptions::none();
+
+        let result = service.cleanup(&options);
+        assert!(result.is_ok());
+
+        let commands = mock.get_commands();
+        assert!(!commands.contains(&"prune:containers".to_string()));
+        assert!(!commands.contains(&"prune:images".to_string()));
+        assert!(!commands.contains(&"prune:volumes".to_string()));
+        assert!(!commands.contains(&"prune:build_cache".to_string()));
+    }
+
+    #[test]
+    fn test_cleanup_continues_on_individual_failures() {
+        let (service, mock) = create_test_service();
+
+        // Configura falha no prune de imagens
+        mock.set_fail_on("prune_images");
+
+        let options = CleanupOptions::all();
+
+        // Cleanup não deve falhar completamente
+        let result = service.cleanup(&options);
+        assert!(result.is_ok());
+
+        // Outros comandos de prune devem ter sido executados
+        let commands = mock.get_commands();
+        assert!(commands.contains(&"prune:containers".to_string()));
+        assert!(commands.contains(&"prune:volumes".to_string()));
+        assert!(commands.contains(&"prune:build_cache".to_string()));
     }
 }

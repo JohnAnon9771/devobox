@@ -130,6 +130,36 @@ impl ContainerRuntime for PodmanAdapter {
             &format!("construindo imagem {tag} a partir de {:?}", containerfile),
         )
     }
+
+    fn prune_containers(&self) -> Result<()> {
+        podman(["container", "prune", "-f"], "removendo containers parados")
+    }
+
+    fn prune_images(&self) -> Result<()> {
+        podman(
+            ["image", "prune", "-af"],
+            "removendo imagens não utilizadas",
+        )
+    }
+
+    fn prune_volumes(&self) -> Result<()> {
+        podman(["volume", "prune", "-f"], "removendo volumes órfãos")
+    }
+
+    fn prune_build_cache(&self) -> Result<()> {
+        // Podman usa buildah internamente, então tentamos limpar o cache
+        // Se o comando falhar (não disponível), ignoramos silenciosamente
+        let status = podman_status(["builder", "prune", "-af"], "limpando cache de build");
+
+        // Ignora erro se o comando não existir
+        match status {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                // Builder prune pode não estar disponível em todas versões
+                Ok(())
+            }
+        }
+    }
 }
 
 fn get_container_state(name: &str) -> Result<ContainerState> {

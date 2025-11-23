@@ -157,6 +157,9 @@ devobox status
 
 # Reconstruir a imagem do zero
 devobox rebuild
+
+# Reconstruir sem limpeza automática
+devobox rebuild --skip-cleanup
 ```
 
 > **💡 Dica:** O comando `shell` mapeia automaticamente seu diretório atual. Se você executar `devobox shell` de dentro de `~/code/projeto1`, você já inicia em `/home/dev/code/projeto1` dentro do container!
@@ -185,6 +188,48 @@ devobox db status
 # ou
 devobox db ls  # alias
 ```
+
+### Limpeza de Recursos
+
+O Devobox inclui comandos de limpeza para remover recursos não utilizados do Podman e liberar espaço em disco:
+
+```bash
+# Limpar tudo (containers parados, imagens não utilizadas, volumes órfãos e cache de build)
+devobox cleanup
+
+# Limpar apenas containers parados
+devobox cleanup --containers
+
+# Limpar apenas imagens não utilizadas
+devobox cleanup --images
+
+# Limpar apenas volumes órfãos
+devobox cleanup --volumes
+
+# Limpar apenas cache de build
+devobox cleanup --build-cache
+
+# Combinações (limpar containers e imagens)
+devobox cleanup --containers --images
+```
+
+**Limpeza Automática:**
+
+- O comando `devobox rebuild` **executa limpeza automática** antes de construir
+- Remove containers parados, imagens não utilizadas e cache de build
+- **Preserva volumes de dados** dos bancos de dados
+- Use `--skip-cleanup` para pular a limpeza automática
+
+**O que cada operação remove:**
+
+| Operação        | Comando Podman              | O que remove                               |
+| --------------- | --------------------------- | ------------------------------------------ |
+| `--containers`  | `podman container prune -f` | Containers parados                         |
+| `--images`      | `podman image prune -af`    | Imagens não utilizadas e dangling          |
+| `--volumes`     | `podman volume prune -f`    | Volumes órfãos (não anexados a containers) |
+| `--build-cache` | `podman builder prune -af`  | Cache de build (layers intermediárias)     |
+
+> **💡 Dica:** Execute `devobox cleanup` periodicamente para manter seu sistema limpo e liberar espaço em disco.
 
 ## 📁 Estrutura de Diretórios
 

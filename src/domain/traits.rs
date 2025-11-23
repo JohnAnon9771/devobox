@@ -27,4 +27,16 @@ pub trait ContainerRuntime: Send + Sync {
 
     /// Build an image
     fn build_image(&self, tag: &str, containerfile: &Path, context_dir: &Path) -> Result<()>;
+
+    /// Prune stopped containers
+    fn prune_containers(&self) -> Result<()>;
+
+    /// Prune unused images
+    fn prune_images(&self) -> Result<()>;
+
+    /// Prune unused volumes
+    fn prune_volumes(&self) -> Result<()>;
+
+    /// Prune build cache
+    fn prune_build_cache(&self) -> Result<()>;
 }

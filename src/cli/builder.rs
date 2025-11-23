@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use devobox::infra::PodmanAdapter;
 use devobox::infra::config::{databases_path, load_databases};
-use devobox::services::ContainerService;
+use devobox::services::{CleanupOptions, ContainerService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -15,14 +15,18 @@ pub struct BuilderCommand {
 #[derive(Subcommand)]
 pub enum BuilderAction {
     /// Constrói a imagem e recria containers (devobox + bancos)
-    Build,
+    Build {
+        /// Pular limpeza automática de recursos
+        #[arg(long)]
+        skip_cleanup: bool,
+    },
     /// Apenas verifica se as dependências para build estão disponíveis
     Check,
 }
 
 pub fn run(cmd: BuilderCommand, config_dir: &Path) -> Result<()> {
     match cmd.command {
-        BuilderAction::Build => build(config_dir),
+        BuilderAction::Build { skip_cleanup } => build(config_dir, skip_cleanup),
         BuilderAction::Check => check(),
     }
 }
@@ -42,7 +46,7 @@ fn check() -> Result<()> {
     Ok(())
 }
 
-fn build(config_dir: &Path) -> Result<()> {
+fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     let runtime = Arc::new(PodmanAdapter::new());
     let service = ContainerService::new(runtime);
     let containerfile = config_dir.join("Containerfile");
@@ -52,6 +56,17 @@ fn build(config_dir: &Path) -> Result<()> {
             "Containerfile não encontrado em {:?}. Rode 'devobox agent install' primeiro.",
             config_dir
         );
+    }
+
+    // Limpeza pré-build (remove recursos antigos antes de construir)
+    if !skip_cleanup {
+        let cleanup_options = CleanupOptions {
+            containers: true,
+            images: true,
+            volumes: false, // Preserva volumes de dados
+            build_cache: true,
+        };
+        let _ = service.cleanup(&cleanup_options);
     }
 
     let context = config_dir.to_path_buf();
