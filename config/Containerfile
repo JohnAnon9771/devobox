@@ -19,6 +19,7 @@ RUN mkdir -p /home/dev/.config/nvim && \
     mkdir -p /home/dev/.local/share/nvim && \
     mkdir -p /home/dev/.local/state/nvim && \
     mkdir -p /home/dev/.local/share/mise && \
+    mkdir -p /home/dev/.config/mise && \
     mkdir -p /home/dev/.cache && \
     chown -R dev:dev /home/dev
 
@@ -34,5 +35,9 @@ RUN curl https://mise.jdx.dev/install.sh | sh
 ENV PATH="/home/dev/.local/bin:${PATH}"
 RUN echo 'eval "$($HOME/.local/bin/mise activate bash)"' >> ~/.bashrc && \
     echo 'PS1="\[\e[1;36m\][devobox] \w \$ \[\e[0m\]"' >> ~/.bashrc
+    
+COPY --chown=dev:dev mise.toml /home/dev/.config/mise/config.toml
+
+RUN mise install
 
 CMD ["/bin/bash"]

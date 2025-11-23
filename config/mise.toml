@@ -1,0 +1,4 @@
+[tools]
+ruby = "latest"
+rust = "latest"
+node = "latest"

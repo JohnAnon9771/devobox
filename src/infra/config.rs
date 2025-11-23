@@ -30,7 +30,7 @@ pub fn ensure_config_dir(config_dir: &Path) -> Result<()> {
 pub fn copy_template_if_missing(source_dir: &Path, target_dir: &Path) -> Result<()> {
     ensure_config_dir(target_dir)?;
 
-    for file in ["Containerfile", "databases.yml"] {
+    for file in ["Containerfile", "databases.yml", "mise.toml"] {
         let source = source_dir.join(file);
         let target = target_dir.join(file);
 
@@ -232,5 +232,26 @@ databases:
         assert_eq!(dbs[0].name, "first");
         assert_eq!(dbs[1].name, "second");
         assert_eq!(dbs[2].name, "third");
+    }
+    #[test]
+    fn copies_mise_toml() {
+        let temp_dir = std::env::temp_dir().join("devobox_test_mise");
+        let source_dir = temp_dir.join("source");
+        let target_dir = temp_dir.join("target");
+
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::write(source_dir.join("Containerfile"), "").unwrap();
+        fs::write(source_dir.join("databases.yml"), "").unwrap();
+        fs::write(source_dir.join("mise.toml"), "content").unwrap();
+
+        copy_template_if_missing(&source_dir, &target_dir).unwrap();
+
+        assert!(target_dir.join("mise.toml").exists());
+        assert_eq!(
+            fs::read_to_string(target_dir.join("mise.toml")).unwrap(),
+            "content"
+        );
+
+        fs::remove_dir_all(temp_dir).unwrap();
     }
 }
