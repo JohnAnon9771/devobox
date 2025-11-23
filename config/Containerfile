@@ -3,15 +3,27 @@ FROM docker.io/archlinux:latest
 RUN pacman -Sy --noconfirm archlinux-keyring && \
     pacman -Syu --noconfirm && \
     pacman -S --noconfirm \
-      base-devel git curl openssh wget \
+      base-devel git curl openssh wget sudo \
       libffi zlib openssl readline ncurses libyaml gdbm \
       postgresql-libs redis imagemagick libvips \
-      man-db vim shadow \
-      iputils iproute2 bind-tools && \
+      man-db neovim vi vim shadow tmux lazygit \
+      ripgrep fd unzip gzip tar xclip wl-clipboard \
+      cmake iputils iproute2 bind-tools && \
     pacman -Scc --noconfirm
 
-# Add user dev
-RUN useradd -m -s /bin/bash dev
+RUN useradd -m -s /bin/bash dev && \
+    echo "dev ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/dev
+
+RUN mkdir -p /home/dev/.config/nvim && \
+    mkdir -p /home/dev/.local/share/nvim && \
+    mkdir -p /home/dev/.local/state/nvim && \
+    mkdir -p /home/dev/.local/share/mise && \
+    mkdir -p /home/dev/.cache && \
+    chown -R dev:dev /home/dev
+
+RUN git clone https://github.com/JohnAnon9771/my-nvim.git /home/dev/.config/nvim || true && \
+    sudo chown -R dev:dev /home/dev/.config/nvim && \
+    sudo chmod -R u+w /home/dev/.config/nvim
 
 USER dev
 WORKDIR /home/dev
