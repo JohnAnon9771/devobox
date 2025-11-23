@@ -12,6 +12,11 @@ enum DatabaseDocument {
     List(Vec<Database>),
 }
 
+#[derive(Deserialize, Debug)]
+pub struct MiseConfig {
+    pub tools: std::collections::HashMap<String, String>,
+}
+
 pub fn default_config_dir() -> PathBuf {
     std::env::var("HOME")
         .map(PathBuf::from)
@@ -58,6 +63,20 @@ pub fn load_databases(config_dir: &Path) -> Result<Vec<Database>> {
     }
 
     parse_databases(&content, &path)
+}
+
+pub fn load_mise_config(config_dir: &Path) -> Result<MiseConfig> {
+    let path = config_dir.join("mise.toml");
+
+    if !path.exists() {
+        bail!("mise.toml não encontrado em {:?}", config_dir);
+    }
+
+    let content = fs::read_to_string(&path).with_context(|| format!("lendo {:?}", path))?;
+    let config: MiseConfig =
+        toml::from_str(&content).with_context(|| format!("parse de {:?}", path))?;
+
+    Ok(config)
 }
 
 fn parse_databases(content: &str, path: &Path) -> Result<Vec<Database>> {
@@ -251,6 +270,24 @@ databases:
             fs::read_to_string(target_dir.join("mise.toml")).unwrap(),
             "content"
         );
+
+        fs::remove_dir_all(temp_dir).unwrap();
+    }
+
+    #[test]
+    fn parses_mise_toml() {
+        let toml = r#"
+[tools]
+ruby = "3.2"
+node = "20"
+"#;
+        let temp_dir = std::env::temp_dir().join("devobox_test_mise_parse");
+        fs::create_dir_all(&temp_dir).unwrap();
+        fs::write(temp_dir.join("mise.toml"), toml).unwrap();
+
+        let config = load_mise_config(&temp_dir).unwrap();
+        assert_eq!(config.tools.get("ruby").unwrap(), "3.2");
+        assert_eq!(config.tools.get("node").unwrap(), "20");
 
         fs::remove_dir_all(temp_dir).unwrap();
     }

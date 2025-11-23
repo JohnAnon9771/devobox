@@ -53,9 +53,9 @@ Em ambientes Docker Compose puros, toda vez que você derruba o container, você
 **A Solução Devobox:**
 Criar um **"Container de Estimação" (Pet Container)**.
 
-- Persiste suas ferramentas instaladas via Mise
-- Mantém o container rodando (não é destruído a cada uso)
-- Se comporta como um **segundo computador** que está sempre lá, pronto para você trabalhar, mas que pode ser resetado se necessário
+- Define suas ferramentas em `mise.toml`
+- O container é imutável e reprodutível
+- Se comporta como um **segundo computador** que está sempre lá, mas com configuração declarativa
 
 ### 4. 💾 Eficiência de Recursos (O Modelo "Shared Services")
 
@@ -369,24 +369,29 @@ redis://localhost:6379
 ## 📝 Workflow Completo
 
 ```bash
-# 1. Navegar para seu projeto (no host)
+# 1. Definir ferramentas (no host)
+# Edite ~/.config/devobox/mise.toml
+# [tools]
+# node = "20.11.0"
+# ruby = "3.2.2"
+
+# 2. Reconstruir ambiente (aplica mudanças)
+devobox rebuild
+
+# 3. Navegar para seu projeto
 cd ~/code/meu-projeto
 
-# 2. Iniciar ambiente com bancos (já começa no diretório correto)
+# 4. Iniciar ambiente
 devobox shell --with-dbs
 
-# 3. Configurar runtimes com Mise (dentro do container)
-mise use node@20.11.0
-mise use ruby@3.2.2
-
-# 4. Instalar dependências
+# 5. Instalar dependências do projeto
 npm install
 bundle install
 
-# 5. Criar database no Postgres
+# 6. Criar database no Postgres
 createdb meu_projeto_dev
 
-# 6. Rodar migrações/seeds
+# 7. Rodar migrações/seeds
 rails db:migrate
 npm run migrate
 
@@ -412,7 +417,6 @@ devobox down
    - Network: `--network host` (performance máxima)
    - Volumes:
      - `~/code:/home/dev/code` (bind mount - projetos)
-     - `devobox_mise:/home/dev/.local/share/mise` (volume nomeado - ferramentas Mise)
    - Segurança: `--userns=keep-id` (preserva UID/GID do host)
 
 2. **postgres** - PostgreSQL 16
@@ -456,7 +460,7 @@ devobox down
 
 **Persistência de Dados:**
 
-- ✅ **Ferramentas Mise**: Persistem via volume `devobox_mise` (sobrevivem a `rebuild`)
+- ✅ **Ferramentas Mise**: Persistem na **imagem** (definidas em `mise.toml`)
 - ✅ **Projetos**: Persistem via bind mount `~/code` (seus arquivos no host)
 - ⚠️ **Histórico bash**: NÃO persiste (perdido ao executar `rebuild`)
 - ⚠️ **Bancos de dados**: Persistem entre restarts (`down`/`up`), mas são **perdidos** ao executar `rebuild`
@@ -555,13 +559,10 @@ devobox db restart
 
 ### Mise não encontra ferramentas
 
-```bash
-# Dentro do container
-mise doctor
+As ferramentas devem ser definidas no `mise.toml` antes do build.
 
-# Forçar reinstalação
-mise install
-```
+1. Edite `~/.config/devobox/mise.toml`
+2. Rode `devobox rebuild`
 
 ### Performance lenta de I/O
 

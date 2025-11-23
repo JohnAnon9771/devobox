@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use devobox::infra::PodmanAdapter;
-use devobox::infra::config::{databases_path, load_databases};
+use devobox::infra::config::{databases_path, load_databases, load_mise_config};
 use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -73,6 +73,9 @@ fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     let context = config_dir.to_path_buf();
     println!("🏗️  Construindo imagem Devobox (Arch)...");
     system_service.build_image("devobox-img", &containerfile, &context)?;
+    
+    println!("🔍 Validando mise.toml...");
+    load_mise_config(config_dir)?;
 
     println!(
         "🗄️  Lendo bancos de dados em {:?}...",
@@ -91,7 +94,6 @@ fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     let code_dir = code_mount()?;
     let dev_volumes = vec![
         code_dir.clone(),
-        "devobox_mise:/home/dev/.local/share/mise".to_string(),
     ];
 
     let dev_spec = devobox::domain::ContainerSpec {
