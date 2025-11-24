@@ -129,6 +129,8 @@ impl ContainerRuntime for PodmanAdapter {
         podman(
             [
                 OsStr::new("build"),
+                OsStr::new("--network"),
+                OsStr::new("host"),
                 OsStr::new("-t"),
                 OsStr::new(tag),
                 OsStr::new("-f"),

@@ -1,6 +1,7 @@
 FROM docker.io/archlinux:latest
 
-RUN pacman -Sy --noconfirm archlinux-keyring && \
+RUN sed -i 's/#ParallelDownloads = 5/ParallelDownloads = 5/g' /etc/pacman.conf && \
+    pacman -Sy --noconfirm archlinux-keyring && \
     pacman -Syu --noconfirm && \
     pacman -S --noconfirm \
       base-devel git curl openssh wget sudo \
