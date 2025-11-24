@@ -225,10 +225,11 @@ fn container_workdir() -> Result<Option<PathBuf>> {
     let pwd = std::env::current_dir()?;
     let home = std::env::var("HOME").unwrap_or_default();
     let home_path = PathBuf::from(&home);
+    let code_dir = home_path.join("code");
 
-    if let Ok(stripped) = pwd.strip_prefix(&home_path) {
-        return Ok(Some(PathBuf::from("/home/dev").join(stripped)));
+    if let Ok(stripped) = pwd.strip_prefix(&code_dir) {
+        return Ok(Some(PathBuf::from("/home/dev/code").join(stripped)));
     }
 
-    Ok(None)
+    Ok(Some(PathBuf::from("/home/dev")))
 }
