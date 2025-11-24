@@ -470,6 +470,27 @@ exit
    - Porta: 6379
    - Dados: Persistem entre restarts, perdidos no rebuild
 
+### Volumes Persistentes
+
+**Volume do Mise (`devobox-mise`):**
+
+O Devobox usa um volume nomeado para o diretório de instalações do Mise (`~/.local/share/mise`):
+
+- ✅ **Ruby, Node, Python compilados persistem** entre rebuilds
+- ✅ Economiza tempo - não precisa recompilar tudo a cada rebuild
+- ✅ Automático - criado na primeira execução
+- ⚠️ Se quiser limpar: `podman volume rm devobox-mise`
+
+**Exemplo de ganho de tempo:**
+
+```bash
+# Primeiro build: instala Ruby (demora ~10min)
+devobox rebuild
+
+# Segundo rebuild: Ruby já está instalado (instantâneo!)
+devobox rebuild
+```
+
 ### Decisões de Design
 
 **Por que `--network host` (apenas no devobox)?**
@@ -506,8 +527,9 @@ exit
 
 **Persistência de Dados:**
 
-- ✅ **Ferramentas Mise**: Persistem na **imagem** (definidas em `mise.toml`)
+- ✅ **Ferramentas Mise**: Persistem em volume nomeado `devobox-mise` (instalações sobrevivem ao rebuild!)
 - ✅ **Projetos**: Persistem via bind mount `~/code` (seus arquivos no host)
+- ✅ **Chaves SSH**: Compartilhadas do host via bind mount read-only
 - ⚠️ **Histórico bash**: NÃO persiste (perdido ao executar `rebuild`)
 - ⚠️ **Bancos de dados**: Persistem entre restarts (`down`/`up`), mas são **perdidos** ao executar `rebuild`
 - 💡 **Dica**: Para persistência permanente de dados de banco, declare volumes nomeados no `databases.yml`
