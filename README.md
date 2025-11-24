@@ -102,9 +102,8 @@ source ~/.bashrc
 # 5. Verificar instalação
 devobox --version
 
-# 6. Configurar ambiente
-devobox agent install
-devobox builder build
+# 6. Configurar ambiente (setup automático)
+devobox init
 ```
 
 ### Método 2: Compilar do Código Fonte
@@ -120,60 +119,77 @@ cargo build --release
 # 3. Instalar
 install -Dm755 ./target/release/devobox ~/.local/bin/devobox
 
-# 4. Configurar ambiente
-devobox agent install
-devobox builder build
+# 4. Configurar ambiente (setup automático)
+devobox init
 ```
 
 ### Após a Instalação
 
-A própria CLI cuida da preparação do ambiente:
+O comando `devobox init` cuida de toda a preparação do ambiente:
 
-1. Copia os templates (`Containerfile` e `databases.yml`) para `~/.config/devobox` (somente se não existirem)
-2. Verifica dependências básicas (ex.: Podman) via `devobox agent doctor`
-3. Constrói a imagem base e recria os containers (devobox + bancos definidos no `databases.yml`)
+1. Copia os templates (`Containerfile` e `databases.yml`) para `~/.config/devobox`
+2. Constrói a imagem base com todas as ferramentas definidas em `mise.toml`
+3. Cria os containers (devobox + bancos definidos no `databases.yml`)
+
+**Ainda mais fácil:** Se você executar `devobox` sem fazer o setup, ele detecta automaticamente e executa o `init` para você!
 
 ## 🛠️ Comandos
 
-### Ambiente de Desenvolvimento
+### 🎯 Comandos Essenciais (Uso Diário)
 
 ```bash
-# Entrar no ambiente de desenvolvimento
-devobox shell
-# ou
-devobox enter  # alias
+# Abrir shell de desenvolvimento (comando padrão)
+devobox                    # Abre o shell (auto-setup se necessário)
+devobox -d                 # Abre o shell com bancos de dados
+devobox --with-dbs         # Forma longa de -d
 
-# Entrar no ambiente com bancos de dados já iniciados
-devobox shell --with-dbs
+# Comandos alternativos
+devobox shell              # Shell sem bancos
+devobox dev                # Shell com bancos (equivale a -d)
 
-# Entrar e parar TODOS os containers ao sair (economiza recursos automaticamente)
-devobox shell --auto-stop
-devobox shell --with-dbs --auto-stop
-
-# Subir tudo em background
-devobox up
-
-# Parar tudo (libera RAM)
-devobox down
-
-# Ver status dos containers
-devobox status
-
-# Reconstruir a imagem do zero
-devobox rebuild
-
-# Reconstruir sem limpeza automática
-devobox rebuild --skip-cleanup
+# Gerenciar ambiente
+devobox init               # Setup inicial completo (primeira instalação)
+devobox rebuild            # Reconstrói imagem e containers
+devobox status             # Ver status de todos os containers
 ```
 
-> **💡 Dica:** O comando `shell` mapeia automaticamente seu diretório atual. Se você executar `devobox shell` de dentro de `~/code/projeto1`, você já inicia em `/home/dev/code/projeto1` dentro do container!
+### 🗄️ Gerenciamento de Containers
 
-**Modo Auto-Stop:**
+```bash
+# Subir/Parar containers
+devobox up                 # Sobe devobox + todos os bancos
+devobox start              # Alias de 'up'
+devobox down               # Para todos os containers
+devobox stop               # Alias de 'down'
+
+# Ver status
+devobox status             # Lista todos os containers e estados
+```
+
+### 🔧 Comandos Avançados
+
+```bash
+# Shell com opções especiais
+devobox --auto-stop        # Para tudo ao sair (economiza recursos)
+devobox -d --auto-stop     # Com bancos + auto-stop
+devobox shell --with-dbs   # Shell com bancos (forma explícita)
+
+# Reconstruir com opções
+devobox rebuild --skip-cleanup   # Reconstrói sem limpar cache
+```
+
+**🎯 Dicas de Uso:**
+
+- O comando `devobox` (sem argumentos) é o jeito mais rápido de começar a trabalhar
+- Ele mapeia automaticamente seu diretório atual: `cd ~/code/projeto1 && devobox` já te coloca em `/home/dev/code/projeto1`
+- Na primeira execução, faz setup automático - você não precisa se preocupar com nada!
+
+**⚡ Modo Auto-Stop:**
 
 O flag `--auto-stop` encerra **todos os containers** automaticamente quando você sai do shell, liberando recursos do sistema:
 
 ```bash
-$ devobox shell --with-dbs --auto-stop
+$ devobox -d --auto-stop
 🔌 Iniciando pg...
 🔌 Iniciando redis...
 🚀 Entrando no devobox (workdir Some("/home/dev/code/myproject"))
@@ -201,32 +217,30 @@ $ exit
 - ❌ Quando vai voltar ao shell logo em seguida
 - ❌ Múltiplas sessões shell simultâneas (terminais diferentes)
 
-### Gerenciamento de Bancos de Dados
+### 🗄️ Gerenciamento de Bancos de Dados
 
 ```bash
 # Iniciar todos os bancos
 devobox db start
 
 # Iniciar banco específico
-devobox db start postgres
+devobox db start pg
 devobox db start redis
 
 # Parar todos os bancos
 devobox db stop
 
 # Parar banco específico
-devobox db stop postgres
+devobox db stop pg
 
 # Reiniciar bancos
-devobox db restart [postgres|redis]
+devobox db restart [pg|redis]
 
 # Ver status dos bancos
 devobox db status
-# ou
-devobox db ls  # alias
 ```
 
-### Limpeza de Recursos
+### 🧹 Limpeza de Recursos
 
 O Devobox inclui comandos de limpeza para remover recursos não utilizados do Podman e liberar espaço em disco:
 
@@ -368,6 +382,32 @@ redis://localhost:6379
 
 ## 📝 Workflow Completo
 
+### Fluxo Simplificado (Recomendado)
+
+```bash
+# 1. Primeira vez: fazer setup
+devobox init
+# Ou apenas: devobox (faz auto-setup)
+
+# 2. Navegar para seu projeto
+cd ~/code/meu-projeto
+
+# 3. Abrir shell com bancos de dados
+devobox -d
+# Ou: devobox (sem bancos)
+
+# 4. Trabalhar normalmente dentro do container
+npm install
+bundle install
+rails db:migrate
+rails server
+
+# 5. Sair
+exit
+```
+
+### Fluxo Completo com Customizações
+
 ```bash
 # 1. Definir ferramentas (no host)
 # Edite ~/.config/devobox/mise.toml
@@ -381,8 +421,8 @@ devobox rebuild
 # 3. Navegar para seu projeto
 cd ~/code/meu-projeto
 
-# 4. Iniciar ambiente
-devobox shell --with-dbs
+# 4. Iniciar ambiente com bancos e auto-stop
+devobox -d --auto-stop
 
 # 5. Instalar dependências do projeto
 npm install
@@ -395,16 +435,13 @@ createdb meu_projeto_dev
 rails db:migrate
 npm run migrate
 
-# 7. Desenvolver normalmente
+# 8. Desenvolver normalmente
 rails server
 # ou
 npm run dev
 
-# 8. Sair do container
+# 9. Sair do container (auto-stop para tudo)
 exit
-
-# 9. Parar serviços para economizar RAM (opcional)
-devobox down
 ```
 
 ## 🏗️ Arquitetura Técnica

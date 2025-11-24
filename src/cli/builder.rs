@@ -1,52 +1,11 @@
 use anyhow::{Context, Result, bail};
-use clap::{Args, Subcommand};
 use devobox::infra::PodmanAdapter;
 use devobox::infra::config::{databases_path, load_databases, load_mise_config};
 use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-#[derive(Args)]
-pub struct BuilderCommand {
-    #[command(subcommand)]
-    pub command: BuilderAction,
-}
-
-#[derive(Subcommand)]
-pub enum BuilderAction {
-    /// Constrói a imagem e recria containers (devobox + bancos)
-    Build {
-        /// Pular limpeza automática de recursos
-        #[arg(long)]
-        skip_cleanup: bool,
-    },
-    /// Apenas verifica se as dependências para build estão disponíveis
-    Check,
-}
-
-pub fn run(cmd: BuilderCommand, config_dir: &Path) -> Result<()> {
-    match cmd.command {
-        BuilderAction::Build { skip_cleanup } => build(config_dir, skip_cleanup),
-        BuilderAction::Check => check(),
-    }
-}
-
-fn check() -> Result<()> {
-    println!("🔧 Checando ferramentas de build...");
-    let runtime = Arc::new(PodmanAdapter::new());
-    let service = ContainerService::new(runtime);
-
-    for dep in ["podman"] {
-        if service.is_command_available(dep) {
-            println!("✅ {dep} disponível");
-        } else {
-            println!("⚠️  {dep} não encontrado no PATH");
-        }
-    }
-    Ok(())
-}
-
-fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
+pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     let runtime = Arc::new(PodmanAdapter::new());
     let container_service = Arc::new(ContainerService::new(runtime.clone()));
     let system_service = Arc::new(SystemService::new(runtime));

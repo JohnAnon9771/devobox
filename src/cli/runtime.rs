@@ -1,67 +1,10 @@
 use anyhow::{Result, bail};
-use clap::{Args, Subcommand};
-use devobox::domain::Database;
+use devobox::domain::{ContainerState, Database};
 use devobox::infra::PodmanAdapter;
 use devobox::infra::config::load_databases;
 use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-
-#[derive(Args)]
-pub struct RuntimeCommand {
-    #[command(subcommand)]
-    pub command: RuntimeAction,
-}
-
-#[derive(Subcommand)]
-pub enum RuntimeAction {
-    /// Abre um shell dentro do container devobox
-    Shell {
-        /// Inicializa bancos antes de entrar
-        #[arg(long)]
-        with_dbs: bool,
-        /// Para todos os containers ao sair do shell
-        #[arg(long)]
-        auto_stop: bool,
-    },
-    /// Sobe devobox e todos os bancos configurados
-    Up,
-    /// Para todos os containers conhecidos
-    Down,
-    /// Mostra status geral
-    Status,
-    /// Controle de bancos de dados
-    Db {
-        #[command(subcommand)]
-        action: DbAction,
-    },
-    /// Limpa recursos não utilizados do Podman
-    Cleanup {
-        /// Limpar apenas containers parados
-        #[arg(long)]
-        containers: bool,
-        /// Limpar apenas imagens não utilizadas
-        #[arg(long)]
-        images: bool,
-        /// Limpar apenas volumes órfãos
-        #[arg(long)]
-        volumes: bool,
-        /// Limpar apenas cache de build
-        #[arg(long)]
-        build_cache: bool,
-        /// Limpar tudo (padrão se nenhuma flag especificada)
-        #[arg(long)]
-        all: bool,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum DbAction {
-    Start { service: Option<String> },
-    Stop { service: Option<String> },
-    Restart { service: Option<String> },
-    Status,
-}
 
 struct Runtime {
     config_dir: PathBuf,
@@ -168,7 +111,7 @@ impl Runtime {
         Ok(())
     }
 
-    fn shell(&self, with_dbs: bool, auto_stop: bool) -> Result<()> {
+    fn run_shell(&self, with_dbs: bool, auto_stop: bool) -> Result<()> {
         if with_dbs {
             self.start_all_dbs()?;
         }
@@ -206,65 +149,76 @@ impl Runtime {
     }
 }
 
-pub fn run(cmd: RuntimeCommand, config_dir: &Path) -> Result<()> {
+pub fn shell(config_dir: &Path, with_dbs: bool, auto_stop: bool) -> Result<()> {
+    if !config_dir.exists() {
+        println!("⚠️  Ambiente não configurado.");
+        println!("🔧 Executando setup inicial automaticamente...\n");
+
+        crate::cli::agent::install(config_dir)?;
+    }
+
     let runtime = Runtime::new(config_dir)?;
 
-    match cmd.command {
-        RuntimeAction::Shell {
-            with_dbs,
-            auto_stop,
-        } => runtime.shell(with_dbs, auto_stop),
-        RuntimeAction::Up => {
-            runtime.start_all_dbs()?;
-            runtime.ensure_dev_container()
-        }
-        RuntimeAction::Down => {
-            for name in runtime.all_containers() {
-                runtime.container_service.stop(&name)?;
-            }
-            println!("✅ Tudo parado");
-            Ok(())
-        }
-        RuntimeAction::Status => runtime.status(),
-        RuntimeAction::Db { action } => match action {
-            DbAction::Start { service } => match service {
-                Some(name) => runtime.start_db(&name),
-                None => runtime.start_all_dbs(),
-            },
-            DbAction::Stop { service } => match service {
-                Some(name) => runtime.stop_db(&name),
-                None => runtime.stop_all_dbs(),
-            },
-            DbAction::Restart { service } => match service {
-                Some(name) => runtime.restart_db(&name),
-                None => runtime.restart_all_dbs(),
-            },
-            DbAction::Status => runtime.status(),
-        },
-        RuntimeAction::Cleanup {
-            containers,
-            images,
-            volumes,
-            build_cache,
-            all,
-        } => {
-            // If no specific flag was provided, or if --all was specified, clean everything
-            let cleanup_all = all || (!containers && !images && !volumes && !build_cache);
+    let devobox_status = runtime.container_service.get_status("devobox")?;
+    if devobox_status.state == ContainerState::NotCreated {
+        println!("⚠️  Container 'devobox' não encontrado.");
+        println!("🔧 Construindo ambiente...\n");
 
-            let options = if cleanup_all {
-                CleanupOptions::all()
-            } else {
-                CleanupOptions {
-                    containers,
-                    images,
-                    volumes,
-                    build_cache,
-                }
-            };
-
-            runtime.cleanup(&options)
-        }
+        crate::cli::builder::build(config_dir, false)?;
     }
+
+    println!("\n✅ Ambiente pronto! Abrindo shell...\n");
+
+    runtime.run_shell(with_dbs, auto_stop)
+}
+
+pub fn up(config_dir: &Path) -> Result<()> {
+    let runtime = Runtime::new(config_dir)?;
+    runtime.start_all_dbs()?;
+    runtime.ensure_dev_container()
+}
+
+pub fn down(config_dir: &Path) -> Result<()> {
+    let runtime = Runtime::new(config_dir)?;
+    for name in runtime.all_containers() {
+        runtime.container_service.stop(&name)?;
+    }
+    println!("✅ Tudo parado");
+    Ok(())
+}
+
+pub fn status(config_dir: &Path) -> Result<()> {
+    let runtime = Runtime::new(config_dir)?;
+    runtime.status()
+}
+
+pub fn db_start(config_dir: &Path, service: Option<&str>) -> Result<()> {
+    let runtime = Runtime::new(config_dir)?;
+    match service {
+        Some(name) => runtime.start_db(name),
+        None => runtime.start_all_dbs(),
+    }
+}
+
+pub fn db_stop(config_dir: &Path, service: Option<&str>) -> Result<()> {
+    let runtime = Runtime::new(config_dir)?;
+    match service {
+        Some(name) => runtime.stop_db(name),
+        None => runtime.stop_all_dbs(),
+    }
+}
+
+pub fn db_restart(config_dir: &Path, service: Option<&str>) -> Result<()> {
+    let runtime = Runtime::new(config_dir)?;
+    match service {
+        Some(name) => runtime.restart_db(name),
+        None => runtime.restart_all_dbs(),
+    }
+}
+
+pub fn cleanup(config_dir: &Path, options: &CleanupOptions) -> Result<()> {
+    let runtime = Runtime::new(config_dir)?;
+    runtime.cleanup(options)
 }
 
 fn container_workdir() -> Result<Option<PathBuf>> {
