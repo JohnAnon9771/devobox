@@ -32,19 +32,28 @@ pub fn ensure_config_dir(config_dir: &Path) -> Result<()> {
     fs::create_dir_all(config_dir).with_context(|| format!("criando {:?}", config_dir))
 }
 
-pub fn copy_template_if_missing(source_dir: &Path, target_dir: &Path) -> Result<()> {
+pub const CONTAINERFILE: &str = include_str!("../../config/Containerfile");
+pub const DATABASES_YML: &str = include_str!("../../config/databases.yml");
+pub const MISE_TOML: &str = include_str!("../../config/mise.toml");
+
+pub fn install_default_config(target_dir: &Path) -> Result<()> {
     ensure_config_dir(target_dir)?;
 
-    for file in ["Containerfile", "databases.yml", "mise.toml"] {
-        let source = source_dir.join(file);
-        let target = target_dir.join(file);
+    let files = [
+        ("Containerfile", CONTAINERFILE),
+        ("databases.yml", DATABASES_YML),
+        ("mise.toml", MISE_TOML),
+    ];
+
+    for (name, content) in files {
+        let target = target_dir.join(name);
 
         if target.exists() {
             continue;
         }
 
-        fs::copy(&source, &target)
-            .with_context(|| format!("copiando template de {:?} para {:?}", source, target))?;
+        fs::write(&target, content)
+            .with_context(|| format!("escrevendo template em {:?}", target))?;
     }
 
     Ok(())
@@ -253,22 +262,25 @@ databases:
         assert_eq!(dbs[2].name, "third");
     }
     #[test]
-    fn copies_mise_toml() {
-        let temp_dir = std::env::temp_dir().join("devobox_test_mise");
-        let source_dir = temp_dir.join("source");
+    fn installs_default_config() {
+        let temp_dir = std::env::temp_dir().join("devobox_test_install");
         let target_dir = temp_dir.join("target");
 
-        fs::create_dir_all(&source_dir).unwrap();
-        fs::write(source_dir.join("Containerfile"), "").unwrap();
-        fs::write(source_dir.join("databases.yml"), "").unwrap();
-        fs::write(source_dir.join("mise.toml"), "content").unwrap();
+        // Ensure clean state
+        if target_dir.exists() {
+            fs::remove_dir_all(&target_dir).unwrap();
+        }
 
-        copy_template_if_missing(&source_dir, &target_dir).unwrap();
+        install_default_config(&target_dir).unwrap();
 
         assert!(target_dir.join("mise.toml").exists());
+        assert!(target_dir.join("Containerfile").exists());
+        assert!(target_dir.join("databases.yml").exists());
+
+        // Verify content matches embedded content
         assert_eq!(
             fs::read_to_string(target_dir.join("mise.toml")).unwrap(),
-            "content"
+            MISE_TOML
         );
 
         fs::remove_dir_all(temp_dir).unwrap();

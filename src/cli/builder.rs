@@ -73,7 +73,7 @@ fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     let context = config_dir.to_path_buf();
     println!("🏗️  Construindo imagem Devobox (Arch)...");
     system_service.build_image("devobox-img", &containerfile, &context)?;
-    
+
     println!("🔍 Validando mise.toml...");
     load_mise_config(config_dir)?;
 
@@ -92,9 +92,7 @@ fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     }
 
     let code_dir = code_mount()?;
-    let dev_volumes = vec![
-        code_dir.clone(),
-    ];
+    let dev_volumes = vec![code_dir.clone()];
 
     let dev_spec = devobox::domain::ContainerSpec {
         name: "devobox",

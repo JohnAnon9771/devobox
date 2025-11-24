@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use devobox::infra::PodmanAdapter;
-use devobox::infra::config::{copy_template_if_missing, default_config_dir, ensure_config_dir};
+use devobox::infra::config::{default_config_dir, ensure_config_dir, install_default_config};
 use devobox::services::ContainerService;
 use std::path::Path;
 use std::sync::Arc;
@@ -16,18 +16,14 @@ pub struct AgentOptions {
 pub enum AgentCommand {
     /// Verifica dependências e existência de arquivos de config
     Doctor,
-    /// Copia templates de config para o diretório de configuração
-    Install {
-        /// Diretório fonte contendo Containerfile e databases.yml
-        #[arg(long, default_value = "config")]
-        source: String,
-    },
+    /// Instala templates de config padrão para o diretório de configuração
+    Install,
 }
 
 pub fn run(command: AgentOptions, config_dir: &Path) -> Result<()> {
     match command.command {
         AgentCommand::Doctor => doctor(config_dir),
-        AgentCommand::Install { source } => install(config_dir, &source),
+        AgentCommand::Install => install(config_dir),
     }
 }
 
@@ -57,21 +53,11 @@ fn doctor(config_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn install(config_dir: &Path, source: &str) -> Result<()> {
-    let source_dir = Path::new(source);
-    let source_dir = if source_dir.is_absolute() {
-        source_dir.to_path_buf()
-    } else {
-        std::env::current_dir()?.join(source_dir)
-    };
-
-    println!(
-        "📁 Preparando config em {:?} (templates de {:?})",
-        config_dir, source_dir
-    );
+fn install(config_dir: &Path) -> Result<()> {
+    println!("📁 Preparando config em {:?}", config_dir);
 
     ensure_config_dir(config_dir)?;
-    copy_template_if_missing(&source_dir, config_dir)?;
+    install_default_config(config_dir)?;
 
     println!(
         "✅ Config pronto. Ajuste databases.yml conforme necessário (padrão: {:?})",
