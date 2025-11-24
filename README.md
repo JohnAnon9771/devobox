@@ -148,8 +148,10 @@ devobox shell              # Shell sem bancos
 devobox dev                # Shell com bancos (equivale a -d)
 
 # Gerenciar ambiente
-devobox init               # Setup inicial completo (primeira instalação)
+devobox init               # Setup inicial completo (install + build)
+devobox install            # Apenas instala configs (sem build)
 devobox rebuild            # Reconstrói imagem e containers
+devobox build              # Alias de 'rebuild'
 devobox status             # Ver status de todos os containers
 ```
 
@@ -478,6 +480,13 @@ exit
 - Simplifica configuração: `DATABASE_URL=postgresql://dev:devpass@localhost:5432/mydb`
 - Elimina latência de bridge networking para o ambiente de desenvolvimento
 
+**Por que montar `~/.ssh` do host?**
+
+- Permite usar Git via SSH sem configurar chaves dentro do container
+- Montado como **read-only** (`:ro`) por segurança
+- Suas chaves SSH do host funcionam automaticamente no container
+- Facilita push/pull em repositórios privados
+
 **Por que `--userns=keep-id`?**
 
 - Arquivos criados no container pertencem ao seu usuário no host
@@ -504,6 +513,21 @@ exit
 - 💡 **Dica**: Para persistência permanente de dados de banco, declare volumes nomeados no `databases.yml`
 
 ## ⚙️ Customização
+
+### Fluxo de Customização
+
+```bash
+# 1. Instalar apenas os arquivos de configuração
+devobox install
+
+# 2. Editar as configurações
+vim ~/.config/devobox/Containerfile    # Adicionar ferramentas
+vim ~/.config/devobox/mise.toml        # Configurar versões
+vim ~/.config/devobox/databases.yml    # Configurar bancos
+
+# 3. Construir com as mudanças
+devobox rebuild
+```
 
 ### Adicionar Ferramentas ao Container
 

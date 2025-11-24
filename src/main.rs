@@ -34,7 +34,15 @@ enum Commands {
         #[arg(long)]
         skip_cleanup: bool,
     },
-    /// Reconstrói a imagem e recria containers
+    /// Instala apenas os arquivos de configuração (sem build)
+    Install,
+    /// Constrói a imagem e cria containers
+    Build {
+        /// Pular limpeza automática de recursos
+        #[arg(long)]
+        skip_cleanup: bool,
+    },
+    /// Reconstrói a imagem e recria containers (alias de 'build')
     Rebuild {
         /// Pular limpeza automática de recursos
         #[arg(long)]
@@ -127,7 +135,13 @@ fn main() -> Result<()> {
             println!("\n✅ Setup completo! Use 'devobox' para abrir o shell.");
             Ok(())
         }
-        Some(Commands::Rebuild { skip_cleanup }) => {
+        Some(Commands::Install) => {
+            cli::agent::install(&cli.config_dir)?;
+            println!("\n✅ Configurações instaladas em {:?}", cli.config_dir);
+            println!("💡 Dica: Edite os arquivos e depois rode 'devobox build'");
+            Ok(())
+        }
+        Some(Commands::Build { skip_cleanup } | Commands::Rebuild { skip_cleanup }) => {
             cli::builder::build(&cli.config_dir, skip_cleanup)
         }
         Some(Commands::Shell {
