@@ -25,11 +25,15 @@ impl ContainerRuntime for PodmanAdapter {
     }
 
     fn start_container(&self, name: &str) -> Result<()> {
-        podman(["start", name], &format!("iniciando container {name}"))
+        podman(
+            ["start", name],
+            &format!("iniciando container {name}"),
+            true,
+        )
     }
 
     fn stop_container(&self, name: &str) -> Result<()> {
-        podman(["stop", name], &format!("parando container {name}"))
+        podman(["stop", name], &format!("parando container {name}"), true)
     }
 
     fn create_container(&self, spec: &ContainerSpec) -> Result<()> {
@@ -73,11 +77,15 @@ impl ContainerRuntime for PodmanAdapter {
 
         args.push(spec.image.into());
 
-        podman(args, &format!("criando container {}", spec.name))
+        podman(args, &format!("criando container {}", spec.name), true)
     }
 
     fn remove_container(&self, name: &str) -> Result<()> {
-        let status = podman_status(["rm", "-f", name], &format!("removendo container {name}"))?;
+        let status = podman_status(
+            ["rm", "-f", name],
+            &format!("removendo container {name}"),
+            true,
+        )?;
 
         if !status.success() {
             println!("⚠️  Não foi possível remover {name} (pode não existir)");
@@ -128,26 +136,32 @@ impl ContainerRuntime for PodmanAdapter {
                 context_dir.as_os_str(),
             ],
             &format!("construindo imagem {tag} a partir de {:?}", containerfile),
+            false, // Mostrar output do build
         )
     }
 
     fn prune_containers(&self) -> Result<()> {
-        podman(["container", "prune", "-f"], "removendo containers parados")
+        podman(
+            ["container", "prune", "-f"],
+            "removendo containers parados",
+            false,
+        )
     }
 
     fn prune_images(&self) -> Result<()> {
         podman(
             ["image", "prune", "-af"],
             "removendo imagens não utilizadas",
+            false,
         )
     }
 
     fn prune_volumes(&self) -> Result<()> {
-        podman(["volume", "prune", "-f"], "removendo volumes órfãos")
+        podman(["volume", "prune", "-f"], "removendo volumes órfãos", false)
     }
 
     fn prune_build_cache(&self) -> Result<()> {
-        let status = podman_status(["builder", "prune", "-af"], "limpando cache de build");
+        let status = podman_status(["builder", "prune", "-af"], "limpando cache de build", true);
         match status {
             Ok(_) => Ok(()),
             Err(_) => Ok(()),
@@ -179,6 +193,7 @@ fn container_running(name: &str) -> Result<bool> {
             "{{.State.Running}}",
         ])
         .stdout(Stdio::piped())
+        .stderr(Stdio::null())
         .output()
         .with_context(|| format!("checando estado do container {name}"))?;
 
@@ -190,31 +205,37 @@ fn container_running(name: &str) -> Result<bool> {
 }
 
 fn container_exists(name: &str) -> Result<bool> {
-    Ok(podman_status(
+    let status = podman_status(
         ["container", "inspect", name],
         &format!("checando existência do container {name}"),
-    )?
-    .success())
+        true,
+    )?;
+
+    Ok(status.success())
 }
 
-fn podman<I, S>(args: I, context: &str) -> Result<()>
+fn podman<I, S>(args: I, context: &str, quiet: bool) -> Result<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let status = podman_status(args, context)?;
+    let status = podman_status(args, context, quiet)?;
     ensure_success(status, context)
 }
 
-fn podman_status<I, S>(args: I, context: &str) -> Result<ExitStatus>
+fn podman_status<I, S>(args: I, context: &str, quiet: bool) -> Result<ExitStatus>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    Command::new("podman")
-        .args(args.into_iter().map(|item| item.as_ref().to_os_string()))
-        .status()
-        .with_context(|| context.to_string())
+    let mut cmd = Command::new("podman");
+    cmd.args(args.into_iter().map(|item| item.as_ref().to_os_string()));
+
+    if quiet {
+        cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+
+    cmd.status().with_context(|| context.to_string())
 }
 
 fn ensure_success(status: ExitStatus, context: &str) -> Result<()> {
