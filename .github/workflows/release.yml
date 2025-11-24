@@ -27,13 +27,12 @@ jobs:
         run: |
           cp target/release/devobox devobox-linux-x86_64
           chmod +x devobox-linux-x86_64
-          tar czf devobox-linux-x86_64.tar.gz devobox-linux-x86_64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: devobox-linux-x86_64
-          path: devobox-linux-x86_64.tar.gz
+          path: devobox-linux-x86_64
 
   release:
     name: Create Release

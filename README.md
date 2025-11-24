@@ -84,25 +84,13 @@ Centralizar a infraestrutura.
 ### Método 1: Instalar via Release (Recomendado)
 
 ```bash
-# 1. Baixar a última release
-curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64.tar.gz -o devobox.tar.gz
+# Instalar
+curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 -o ~/.local/bin/devobox && chmod +x ~/.local/bin/devobox
 
-# 2. Extrair o binário
-tar xzf devobox.tar.gz
+# Adicionar ao PATH (se necessário)
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 
-# 3. Mover para ~/.local/bin
-mkdir -p ~/.local/bin
-mv devobox-linux-x86_64 ~/.local/bin/devobox
-chmod +x ~/.local/bin/devobox
-
-# 4. Garantir que ~/.local/bin está no PATH
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-
-# 5. Verificar instalação
-devobox --version
-
-# 6. Configurar ambiente (setup automático)
+# Configurar ambiente
 devobox init
 ```
 
