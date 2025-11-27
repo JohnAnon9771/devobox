@@ -81,13 +81,13 @@ impl ContainerRuntime for PodmanAdapter {
     }
 
     fn remove_container(&self, name: &str) -> Result<()> {
-        let status = podman_status(
+        let status = podman(
             ["rm", "-f", name],
             &format!("removendo container {name}"),
             true,
-        )?;
+        );
 
-        if !status.success() {
+        if status.is_err() {
             println!("⚠️  Não foi possível remover {name} (pode não existir)");
         }
 
@@ -161,11 +161,8 @@ impl ContainerRuntime for PodmanAdapter {
     }
 
     fn prune_build_cache(&self) -> Result<()> {
-        let status = podman_status(["builder", "prune", "-af"], "limpando cache de build", true);
-        match status {
-            Ok(_) => Ok(()),
-            Err(_) => Ok(()),
-        }
+        podman(["builder", "prune", "-af"], "limpando cache de build", true);
+        Ok(())
     }
 }
 
@@ -205,25 +202,16 @@ fn container_running(name: &str) -> Result<bool> {
 }
 
 fn container_exists(name: &str) -> Result<bool> {
-    let status = podman_status(
+    let result = podman(
         ["container", "inspect", name],
         &format!("checando existência do container {name}"),
         true,
-    )?;
+    );
 
-    Ok(status.success())
+    Ok(result.is_ok())
 }
 
-fn podman<I, S>(args: I, context: &str, quiet: bool) -> Result<()>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
-    let status = podman_status(args, context, quiet)?;
-    ensure_success(status, context)
-}
-
-fn podman_status<I, S>(args: I, context: &str, quiet: bool) -> Result<ExitStatus>
+fn run_podman_cmd<I, S>(args: I, context: &str, quiet: bool) -> Result<(ExitStatus, Option<String>)>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -232,16 +220,37 @@ where
     cmd.args(args.into_iter().map(|item| item.as_ref().to_os_string()));
 
     if quiet {
-        cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::piped());
+        let output = cmd.output().with_context(|| context.to_string())?;
+        let stderr = if !output.status.success() {
+            Some(String::from_utf8_lossy(&output.stderr).to_string())
+        } else {
+            None
+        };
+        Ok((output.status, stderr))
+    } else {
+        let status = cmd.status().with_context(|| context.to_string())?;
+        Ok((status, None))
     }
-
-    cmd.status().with_context(|| context.to_string())
 }
 
-fn ensure_success(status: ExitStatus, context: &str) -> Result<()> {
-    if status.success() {
-        return Ok(());
-    }
+fn podman<I, S>(args: I, context: &str, quiet: bool) -> Result<()>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let (status, stderr) = run_podman_cmd(args, context, quiet)?;
 
-    bail!("podman retornou status {:?} ({context})", status)
+    if status.success() {
+        Ok(())
+    } else {
+        let error_msg = stderr.unwrap_or_else(|| "Verifique o output acima".to_string());
+        bail!(
+            "podman retornou status {:?} ({})\nErro: {}",
+            status,
+            context,
+            error_msg.trim()
+        );
+    }
 }

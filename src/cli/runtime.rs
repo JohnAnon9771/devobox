@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use devobox::domain::{ContainerState, Database};
 use devobox::infra::PodmanAdapter;
 use devobox::infra::config::load_databases;
@@ -37,6 +37,11 @@ impl Runtime {
             println!("⚠️  Nenhum banco configurado em {:?}", self.config_dir);
             return Ok(());
         }
+
+        for db in &self.databases {
+            self.ensure_db_created(db)?;
+        }
+
         let db_names: Vec<String> = self.databases.iter().map(|db| db.name.clone()).collect();
         self.orchestrator.start_all(&db_names)
     }
@@ -61,9 +66,15 @@ impl Runtime {
     }
 
     fn start_db(&self, service: &str) -> Result<()> {
-        if !self.is_known_db(service) {
-            bail!("Banco '{service}' não está listado em databases.yml");
-        }
+        let db = self
+            .databases
+            .iter()
+            .find(|d| d.name == service)
+            .context(format!(
+                "Banco '{service}' não está listado em databases.yml"
+            ))?;
+
+        self.ensure_db_created(db)?;
         self.container_service.start(service)
     }
 
@@ -146,6 +157,17 @@ impl Runtime {
 
     fn cleanup(&self, options: &CleanupOptions) -> Result<()> {
         self.orchestrator.cleanup(options)
+    }
+
+    fn ensure_db_created(&self, db: &Database) -> Result<()> {
+        let status = self.container_service.get_status(&db.name)?;
+
+        if status.state == ContainerState::NotCreated {
+            println!("🆕 Criando container para {}...", db.name);
+            self.container_service.recreate(&db.to_spec())?;
+        }
+
+        Ok(())
     }
 }
 
