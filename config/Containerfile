@@ -1,17 +1,20 @@
-FROM docker.io/archlinux:latest
+FROM docker.io/debian:bookworm-slim
 
-RUN sed -i 's/#ParallelDownloads = 5/ParallelDownloads = 5/g' /etc/pacman.conf && \
-    pacman -Sy --noconfirm archlinux-keyring && \
-    pacman -Syu --noconfirm && \
-    pacman -S --noconfirm \
-      base-devel git curl openssh wget sudo \
-      libffi zlib openssl readline ncurses libyaml gdbm \
-      postgresql-libs redis imagemagick libvips \
-      man-db neovim vi vim shadow tmux lazygit \
-      ripgrep fd fzf unzip gzip tar xclip wl-clipboard \
-      python python-pip python-pynvim python-virtualenv sqlite \
-      cmake iputils iproute2 bind-tools && \
-    pacman -Scc --noconfirm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git curl wget sudo \
+    openssh-client \
+    libssl-dev zlib1g-dev libreadline-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev \
+    libpq-dev redis-tools imagemagick libvips ripgrep fd-find \
+    vim tmux unzip zip tar xclip \
+    python3 python3-pip python3-venv \
+    cmake iputils-ping iproute2 dnsutils ca-certificates && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# install nvim
+RUN curl -LO https://github.com/neovim/neovim/releases/download/v0.11.5/nvim-linux-x86_64.tar.gz && \
+    tar -C /opt -xzf nvim-linux-x86_64.tar.gz && \
+    rm nvim-linux-x86_64.tar.gz && \
+    ln -s /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
 
 RUN useradd -m -s /bin/bash dev && \
     echo "dev ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/dev
@@ -34,9 +37,10 @@ WORKDIR /home/dev
 RUN curl https://mise.jdx.dev/install.sh | sh
 
 ENV PATH="/home/dev/.local/bin:${PATH}"
+
 RUN echo 'eval "$($HOME/.local/bin/mise activate bash)"' >> ~/.bashrc && \
     echo 'PS1="\[\e[1;36m\][devobox] \w \$ \[\e[0m\]"' >> ~/.bashrc
-    
+
 COPY --chown=dev:dev mise.toml /home/dev/.config/mise/config.toml
 
 RUN mise install
