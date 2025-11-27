@@ -45,4 +45,10 @@ COPY --chown=dev:dev mise.toml /home/dev/.config/mise/config.toml
 
 RUN mise install
 
+# install ia tools
+RUN mise exec -- npm install -g \
+    @anthropic-ai/claude-code \
+    @openai/codex \
+    @google/gemini-cli
+
 CMD ["/bin/bash"]
