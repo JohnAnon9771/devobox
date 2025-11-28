@@ -1,14 +1,21 @@
+# syntax=docker/dockerfile:1
 FROM docker.io/debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Configure apt to cache packages
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+
+# System package installation with Cache Mount
+# This prevents re-downloading all .deb packages if you change something on this line or below
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     build-essential git curl wget sudo \
     openssh-client \
     libssl-dev zlib1g-dev libreadline-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev \
     libpq-dev redis-tools imagemagick libvips ripgrep fd-find \
     vim tmux unzip zip tar xclip \
     python3 python3-pip python3-venv \
-    cmake iputils-ping iproute2 dnsutils ca-certificates && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    cmake iputils-ping iproute2 dnsutils ca-certificates
 
 # install nvim
 RUN curl -LO https://github.com/neovim/neovim/releases/download/v0.11.5/nvim-linux-x86_64.tar.gz && \
@@ -17,43 +24,52 @@ RUN curl -LO https://github.com/neovim/neovim/releases/download/v0.11.5/nvim-lin
     ln -s /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
 
 # install lazygit
-RUN LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | \grep -Po '"tag_name": *"v\K[^"]*') && \
-    curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz" && \
+ARG LAZYGIT_VERSION=0.44.1
+RUN curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz" && \
     tar xf lazygit.tar.gz lazygit && \
-    sudo install lazygit -D -t /.local/bin/ && \
+    install lazygit -D -t /usr/local/bin/ && \
     rm lazygit.tar.gz lazygit
 
 RUN useradd -m -s /bin/bash dev && \
     echo "dev ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/dev
 
-RUN mkdir -p /home/dev/.config/nvim && \
-    mkdir -p /home/dev/.local/share/nvim && \
-    mkdir -p /home/dev/.local/state/nvim && \
-    mkdir -p /home/dev/.local/share/mise && \
-    mkdir -p /home/dev/.config/mise && \
-    mkdir -p /home/dev/.cache && \
-    chown -R dev:dev /home/dev
-
-RUN git clone https://github.com/JohnAnon9771/my-nvim.git /home/dev/.config/nvim || true && \
-    sudo chown -R dev:dev /home/dev/.config/nvim && \
-    sudo chmod -R u+w /home/dev/.config/nvim
-
 USER dev
 WORKDIR /home/dev
+
+# Pre-create directories with correct permissions
+RUN mkdir -p /home/dev/.config/nvim \
+    /home/dev/.local/share/nvim \
+    /home/dev/.local/state/nvim \
+    /home/dev/.local/share/mise \
+    /home/dev/.config/mise \
+    /home/dev/.cache
+
+RUN git clone --depth 1 https://github.com/JohnAnon9771/my-nvim.git /home/dev/.config/nvim || true
+
+RUN curl -sS https://starship.rs/install.sh | sh -s -- -y
 
 RUN curl https://mise.jdx.dev/install.sh | sh
 
 ENV PATH="/home/dev/.local/bin:${PATH}"
 
 RUN echo 'eval "$($HOME/.local/bin/mise activate bash)"' >> ~/.bashrc && \
-    echo 'PS1="\[\e[1;36m\][devobox] \w \$ \[\e[0m\]"' >> ~/.bashrc
+    echo 'eval "$(starship init bash)"' >> ~/.bashrc && \
+    echo 'alias v="nvim"' >> ~/.bashrc && \
+    echo 'alias ll="ls -alF"' >> ~/.bashrc && \
+    echo 'alias la="ls -A"' >> ~/.bashrc
 
 COPY --chown=dev:dev mise.toml /home/dev/.config/mise/config.toml
+COPY --chown=dev:dev starship.toml /home/dev/.config/starship.toml
+ENV STARSHIP_CONFIG=/home/dev/.config/starship.toml
 
-RUN mise install
+# Mise installation with Cache Mount
+# Mise downloads (node, python, go, etc.) are cached in ~/.cache/mise
+RUN --mount=type=cache,target=/home/dev/.cache/mise,uid=1000,gid=1000 \
+    mise install
 
-# install ia tools
-RUN mise exec -- npm install -g \
+# AI tools installation with NPM Cache Mount
+RUN --mount=type=cache,target=/home/dev/.npm,uid=1000,gid=1000 \
+    mise exec -- npm install -g \
     @anthropic-ai/claude-code \
     @openai/codex \
     @google/gemini-cli

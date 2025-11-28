@@ -1,0 +1,69 @@
+# Starship config: Arch Linux + Rust + Ruby Aesthetic
+# Minimalist, Function-Oriented, and Clean.
+
+format = """
+[ devobox](bold #1793d1) $directory$git_branch$git_status$rust$ruby$nodejs$golang$package$docker_context$time
+$character"""
+
+add_newline = true
+
+# Directory: Clean blue/cyan
+[directory]
+style = "bold cyan"
+read_only = " "
+truncation_length = 3
+truncation_symbol = "../"
+format = "[$path]($style) "
+
+# Git: Minimalist purple
+[git_branch]
+symbol = " "
+style = "bold purple"
+format = "[$symbol$branch]($style) "
+
+[git_status]
+style = "bold red"
+format = '([$all_status$ahead_behind]($style) )'
+
+# Rust: Official Rust Orange/Red (#ce412b)
+[rust]
+symbol = " "
+style = "bold #ce412b"
+format = "[$symbol($version )]($style)"
+
+# Ruby: Official Ruby Red (#CC342D)
+[ruby]
+symbol = " "
+style = "bold #CC342D"
+format = "[$symbol($version )]($style)"
+
+# Node: Standard Green
+[nodejs]
+symbol = " "
+style = "bold green"
+format = "[$symbol($version )]($style)"
+
+# Go: Cyan
+[golang]
+symbol = " "
+style = "bold cyan"
+format = "[$symbol($version )]($style)"
+
+# Package version (shows up if reading package.json/Cargo.toml)
+[package]
+symbol = "📦 "
+style = "bold yellow"
+format = "[$symbol$version]($style) "
+
+# Time: Dimmed yellow, discreet
+[time]
+disabled = false
+time_format = "%R"
+style = "yellow"
+format = '[$time]($style) '
+
+# Character: The "Arch Arch" (Arch Blue Arrow)
+[character]
+success_symbol = "[❯](bold #1793d1)"
+error_symbol = "[❯](bold red)"
+vicmd_symbol = "[❮](bold green)"

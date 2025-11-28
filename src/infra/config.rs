@@ -35,6 +35,7 @@ pub fn ensure_config_dir(config_dir: &Path) -> Result<()> {
 pub const CONTAINERFILE: &str = include_str!("../../config/Containerfile");
 pub const DATABASES_YML: &str = include_str!("../../config/databases.yml");
 pub const MISE_TOML: &str = include_str!("../../config/mise.toml");
+pub const STARSHIP_TOML: &str = include_str!("../../config/starship.toml");
 
 pub fn install_default_config(target_dir: &Path) -> Result<()> {
     ensure_config_dir(target_dir)?;
@@ -43,6 +44,7 @@ pub fn install_default_config(target_dir: &Path) -> Result<()> {
         ("Containerfile", CONTAINERFILE),
         ("databases.yml", DATABASES_YML),
         ("mise.toml", MISE_TOML),
+        ("starship.toml", STARSHIP_TOML),
     ];
 
     for (name, content) in files {

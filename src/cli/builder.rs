@@ -52,8 +52,7 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
 
     let code_dir = code_mount()?;
     let ssh_dir = ssh_mount()?;
-    let mise_volume = "devobox-mise:/home/dev/.local/share/mise".to_string();
-    let dev_volumes = vec![code_dir.clone(), ssh_dir.clone(), mise_volume];
+    let dev_volumes = vec![code_dir.clone(), ssh_dir.clone()];
 
     let dev_spec = devobox::domain::ContainerSpec {
         name: "devobox",
