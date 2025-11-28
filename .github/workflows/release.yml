@@ -19,20 +19,25 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
 
       - name: Build release binary
-        run: cargo build --release
+        run: cargo build --release --target x86_64-unknown-linux-gnu
 
-      - name: Prepare binary
+      - name: Package binary
+        shell: bash
         run: |
-          cp target/release/devobox devobox-linux-x86_64
-          chmod +x devobox-linux-x86_64
+          cd target/x86_64-unknown-linux-gnu/release
+          # Archive name matches the target triple, required by self_update
+          tar -czf ../../../x86_64-unknown-linux-gnu.tar.gz devobox
+          cd -
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: devobox-linux-x86_64
-          path: devobox-linux-x86_64
+          name: x86_64-unknown-linux-gnu
+          path: x86_64-unknown-linux-gnu.tar.gz
 
   release:
     name: Create Release
@@ -50,7 +55,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: artifacts/**/*
+          # Collect all tar.gz files from the artifact subdirectories
+          files: artifacts/**/*.tar.gz
           draft: false
           prerelease: false
           generate_release_notes: true

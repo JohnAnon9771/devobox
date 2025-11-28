@@ -97,6 +97,8 @@ enum Commands {
         #[arg(long)]
         all: bool,
     },
+    /// Atualiza o devobox para a versão mais recente disponível no GitHub
+    Update,
 }
 
 #[derive(Subcommand)]
@@ -192,5 +194,6 @@ fn main() -> Result<()> {
             };
             cli::runtime::cleanup(&cli.config_dir, &options)
         }
+        Some(Commands::Update) => cli::update::update(),
     }
 }
