@@ -90,6 +90,9 @@ enum Commands {
         /// Limpar apenas cache de build
         #[arg(long)]
         build_cache: bool,
+        /// DESTRUTIVO: Reseta todo o ambiente Podman (remove imagens, containers, volumes e cache de build)
+        #[arg(long)]
+        nuke: bool,
         /// Limpar tudo (padrão se nenhuma flag especificada)
         #[arg(long)]
         all: bool,
@@ -169,8 +172,13 @@ fn main() -> Result<()> {
             images,
             volumes,
             build_cache,
+            nuke,
             all,
         }) => {
+            if nuke {
+                return cli::runtime::nuke(&cli.config_dir);
+            }
+
             let cleanup_all = all || (!containers && !images && !volumes && !build_cache);
             let options = if cleanup_all {
                 CleanupOptions::all()

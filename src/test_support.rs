@@ -191,4 +191,10 @@ impl ContainerRuntime for MockRuntime {
         self.check_fail("prune_build_cache")?;
         Ok(())
     }
+
+    fn nuke_system(&self) -> Result<()> {
+        self.record_command("nuke_system");
+        self.check_fail("nuke_system")?;
+        Ok(())
+    }
 }

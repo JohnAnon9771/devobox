@@ -39,4 +39,7 @@ pub trait ContainerRuntime: Send + Sync {
 
     /// Prune build cache
     fn prune_build_cache(&self) -> Result<()>;
+
+    /// Perform an aggressive system cleanup (Nuke)
+    fn nuke_system(&self) -> Result<()>;
 }

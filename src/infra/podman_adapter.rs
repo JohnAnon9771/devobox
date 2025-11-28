@@ -161,7 +161,23 @@ impl ContainerRuntime for PodmanAdapter {
     }
 
     fn prune_build_cache(&self) -> Result<()> {
-        podman(["builder", "prune", "-af"], "limpando cache de build", true);
+        podman(["builder", "prune", "-af"], "limpando cache de build", true)
+    }
+
+    fn nuke_system(&self) -> Result<()> {
+        println!("🧹 Executando limpeza agressiva (Nuke)...");
+        podman(
+            ["system", "prune", "-a", "--volumes", "-f"],
+            "removendo tudo (imagens, containers, volumes)",
+            false,
+        )?;
+        podman(
+            ["builder", "prune", "-a", "-f"],
+            "limpando cache de build",
+            false,
+        )?;
+        println!("✨ Limpeza agressiva concluída!");
+
         Ok(())
     }
 }

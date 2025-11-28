@@ -126,6 +126,11 @@ impl Orchestrator {
         println!("✨ Limpeza concluída!");
         Ok(())
     }
+
+    /// Performs a "Nuke" cleanup (aggressive system reset)
+    pub fn nuke_system(&self) -> Result<()> {
+        self.system_service.nuke_system()
+    }
 }
 
 #[cfg(test)]
@@ -360,5 +365,16 @@ mod tests {
         assert!(commands.contains(&"prune:containers".to_string()));
         assert!(commands.contains(&"prune:volumes".to_string()));
         assert!(commands.contains(&"prune:build_cache".to_string()));
+    }
+
+    #[test]
+    fn test_nuke_system() {
+        let (orchestrator, mock) = create_test_orchestrator();
+
+        let result = orchestrator.nuke_system();
+        assert!(result.is_ok());
+
+        let commands = mock.get_commands();
+        assert!(commands.contains(&"nuke_system".to_string()));
     }
 }

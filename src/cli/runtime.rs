@@ -159,6 +159,10 @@ impl Runtime {
         self.orchestrator.cleanup(options)
     }
 
+    fn nuke(&self) -> Result<()> {
+        self.orchestrator.nuke_system()
+    }
+
     fn ensure_db_created(&self, db: &Database) -> Result<()> {
         let status = self.container_service.get_status(&db.name)?;
 
@@ -241,6 +245,11 @@ pub fn db_restart(config_dir: &Path, service: Option<&str>) -> Result<()> {
 pub fn cleanup(config_dir: &Path, options: &CleanupOptions) -> Result<()> {
     let runtime = Runtime::new(config_dir)?;
     runtime.cleanup(options)
+}
+
+pub fn nuke(config_dir: &Path) -> Result<()> {
+    let runtime = Runtime::new(config_dir)?;
+    runtime.nuke()
 }
 
 fn container_workdir() -> Result<Option<PathBuf>> {

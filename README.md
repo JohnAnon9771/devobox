@@ -269,6 +269,9 @@ devobox cleanup --containers --images
 | `--images`      | `podman image prune -af`    | Imagens não utilizadas e dangling          |
 | `--volumes`     | `podman volume prune -f`    | Volumes órfãos (não anexados a containers) |
 | `--build-cache` | `podman builder prune -af`  | Cache de build (layers intermediárias)     |
+| `--nuke`        | `system prune -a --volumes` | **DESTRUTIVO**: Remove TUDO (imagens, containers, volumes, cache) |
+
+> **☢️ ZONA DE PERIGO:** O comando `devobox cleanup --nuke` é a "arma nuclear". Ele apaga **todas** as imagens, containers e volumes do Podman no seu sistema. Use isso apenas quando precisar recuperar o máximo de espaço em disco possível e estiver disposto a baixar/reconstruir tudo do zero na próxima vez.
 
 > **💡 Dica:** Execute `devobox cleanup` periodicamente para manter seu sistema limpo e liberar espaço em disco.
 

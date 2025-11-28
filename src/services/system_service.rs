@@ -32,6 +32,10 @@ impl SystemService {
     pub fn prune_build_cache(&self) -> Result<()> {
         self.runtime.prune_build_cache()
     }
+
+    pub fn nuke_system(&self) -> Result<()> {
+        self.runtime.nuke_system()
+    }
 }
 
 #[cfg(test)]
