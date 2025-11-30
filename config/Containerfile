@@ -75,7 +75,6 @@ RUN --mount=type=cache,target=/home/dev/.npm,uid=1000,gid=1000 \
     @google/gemini-cli
 
 # Fix permissions for /home/dev
-# Fix permissions for /home/dev
 USER root
 RUN chmod -R 777 /home/dev
 USER dev

@@ -24,7 +24,7 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
             containers: true,
             images: true,
             volumes: false,
-            build_cache: true,
+            build_cache: false,
         };
         let _ = orchestrator.cleanup(&cleanup_options);
     }

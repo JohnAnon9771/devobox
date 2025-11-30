@@ -26,7 +26,7 @@ Se você instala Ruby/Node/Python direto no seu Host, um `pacman -Syu` pode queb
 **A Solução Devobox:**
 Isolar **100%** das runtimes de linguagem (Ruby, Node, Rust, Go) e bibliotecas de sistema dentro de uma "caixa de vidro".
 
-- Seu Arch Host fica apenas com: Kernel, Drivers, Interface Gráfica, Editor e Navegador
+- Seu Host fica apenas com: Kernel, Drivers, Interface Gráfica, Editor e Navegador
 - O resto (gems, node_modules, compiladores) fica contido
 - Se o container quebrar, você recria (`devobox rebuild`). Seu PC continua intacto
 
@@ -340,22 +340,22 @@ redis://localhost:6379
 
 ## 🔧 Stack Tecnológico
 
-### Container Base: Arch Linux Latest
+### Container Base: Debian Bookworm
 
 **Ferramentas de Desenvolvimento:**
 
-- `base-devel` - Compiladores (gcc, make, etc)
+- `build-essential` - Compiladores (gcc, make, etc)
 - `git`, `curl`, `wget`, `openssh`
 - `vim`, `man-db`
 
 **Bibliotecas do Sistema:**
 
-- `libffi`, `zlib`, `openssl`, `readline`
-- `ncurses`, `libyaml`, `gdbm`
+- `libffi-dev`, `zlib1g-dev`, `libssl-dev`, `libreadline-dev`
+- `libncurses5-dev`, `libyaml-dev`, `libgdbm-dev`
 
 **Clientes de Banco:**
 
-- `postgresql-libs` (libpq)
+- `libpq-dev` (libpq)
 - `redis`
 
 **Processamento de Mídia:**
@@ -365,7 +365,7 @@ redis://localhost:6379
 
 **Ferramentas de Rede:**
 
-- `iputils`, `iproute2`, `bind-tools`
+- `iputils-ping`, `iproute2`, `dnsutils`
 
 **Gerenciador de Runtime:**
 
@@ -442,7 +442,7 @@ exit
 ### Containers Criados
 
 1. **devobox** - Container principal de desenvolvimento
-   - Imagem: `devobox-img` (Arch Linux customizado)
+   - Imagem: `devobox-img` (Debian Bookworm customizado)
    - Usuário: `dev` (não-root)
    - Network: `--network host` (performance máxima)
    - Volumes:
@@ -526,8 +526,8 @@ devobox rebuild
 Edite `~/.config/devobox/Containerfile`:
 
 ```dockerfile
-RUN pacman -S --noconfirm \
-    postgresql-libs redis imagemagick vips \
+RUN apt-get update && apt-get install -y \
+    libpq-dev redis-tools imagemagick libvips \
     sua-ferramenta-aqui
 ```
 
@@ -557,17 +557,9 @@ devobox rebuild
 
 ### Personalizar Prompt
 
-O prompt padrão é:
+O prompt é gerenciado pelo **Starship**. Para customizar, edite `~/.config/devobox/starship.toml`.
 
-```
-[devobox] ~/code/projeto $
-```
-
-Para customizar, edite `~/.config/devobox/Containerfile`:
-
-```dockerfile
-RUN echo 'PS1="[\e[1;35m\]dev\[\e[0m\]] \w \$ "' >> ~/.bashrc
-```
+Consulte a [documentação do Starship](https://starship.rs/config/) para mais detalhes.
 
 ## 🐛 Troubleshooting
 
@@ -633,7 +625,7 @@ O Devobox transforma seu "Inner Loop" (ciclo código → teste → debug) em um 
 **O que você NÃO precisa mais fazer:**
 
 - ❌ Instalar múltiplas versões de Ruby/Node via RVM/NVM no host
-- ❌ Debugar conflitos de biblioteca após `pacman -Syu`
+- ❌ Debugar conflitos de biblioteca após `apt-get upgrade`
 - ❌ Rodar 5 instâncias de Postgres para 5 projetos
 - ❌ Poluir seu sistema com dependências de compilação
 
