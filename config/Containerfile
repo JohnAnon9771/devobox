@@ -31,7 +31,7 @@ RUN curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/d
     rm lazygit.tar.gz lazygit
 
 RUN useradd -m -s /bin/bash dev && \
-    echo "dev ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/dev
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/all
 
 USER dev
 WORKDIR /home/dev
@@ -73,5 +73,11 @@ RUN --mount=type=cache,target=/home/dev/.npm,uid=1000,gid=1000 \
     @anthropic-ai/claude-code \
     @openai/codex \
     @google/gemini-cli
+
+# Fix permissions for /home/dev
+# Fix permissions for /home/dev
+USER root
+RUN chmod -R 777 /home/dev
+USER dev
 
 CMD ["/bin/bash"]

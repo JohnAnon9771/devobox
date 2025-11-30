@@ -5,7 +5,7 @@ format = """
 [ devobox](bold #1793d1) $directory$git_branch$git_status$rust$ruby$nodejs$golang$package$docker_context$time
 $character"""
 
-add_newline = true
+add_newline = false
 
 # Directory: Clean blue/cyan
 [directory]
