@@ -484,7 +484,7 @@ services:
         install_default_config(&target_dir).unwrap();
 
         assert!(target_dir.join("mise.toml").exists());
-        assert!(target_dir.join("Containerfile").exists());
+        assert!(target_dir.join(DEFAULT_CONTAINERFILE_NAME).exists());
         assert!(target_dir.join("services.yml").exists());
 
         // Verify content matches embedded content
@@ -507,7 +507,7 @@ node = "20"
         fs::create_dir_all(&temp_dir).unwrap();
         fs::write(temp_dir.join("mise.toml"), toml).unwrap();
 
-        let config = load_mise_config(&temp_dir).unwrap();
+        let config = load_mise_config(&temp_dir.join("mise.toml")).unwrap();
         assert_eq!(config.tools.get("ruby").unwrap(), "3.2");
         assert_eq!(config.tools.get("node").unwrap(), "20");
 

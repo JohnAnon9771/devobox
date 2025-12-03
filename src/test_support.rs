@@ -1,6 +1,5 @@
-use crate::domain::{
-    Container, ContainerHealthStatus, ContainerRuntime, ContainerSpec, ContainerState,
-};
+use crate::domain::traits::ContainerHealthStatus;
+use crate::domain::{Container, ContainerRuntime, ContainerSpec, ContainerState};
 use anyhow::{Result, bail};
 use std::collections::HashMap;
 use std::path::Path;
@@ -49,6 +48,7 @@ impl MockRuntime {
                 name: name.to_string(),
                 state,
                 spec: None,
+                health_status: None,
             },
         );
     }

@@ -213,7 +213,7 @@ fn parse_duration(s: &str) -> Result<Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::ContainerState;
+    use crate::domain::{ContainerState, ServiceKind};
     use crate::test_support::MockRuntime;
 
     fn create_test_orchestrator() -> (Orchestrator, Arc<MockRuntime>) {
@@ -298,6 +298,7 @@ mod tests {
         let svc1 = Service {
             name: "pg".to_string(),
             image: "postgres".to_string(),
+            kind: ServiceKind::Database,
             ports: Vec::new(),
             env: Vec::new(),
             volumes: Vec::new(),
@@ -309,6 +310,7 @@ mod tests {
         let svc2 = Service {
             name: "redis".to_string(),
             image: "redis".to_string(),
+            kind: ServiceKind::Database,
             ports: Vec::new(),
             env: Vec::new(),
             volumes: Vec::new(),
@@ -341,6 +343,7 @@ mod tests {
         let svc1 = Service {
             name: "pg".to_string(),
             image: "postgres".to_string(),
+            kind: ServiceKind::Database,
             ports: Vec::new(),
             env: Vec::new(),
             volumes: Vec::new(),
@@ -352,6 +355,7 @@ mod tests {
         let svc2 = Service {
             name: "devobox".to_string(),
             image: "devobox-img".to_string(),
+            kind: ServiceKind::Generic,
             ports: Vec::new(),
             env: Vec::new(),
             volumes: Vec::new(),
@@ -380,6 +384,7 @@ mod tests {
         let svc1 = Service {
             name: "pg".to_string(),
             image: "postgres".to_string(),
+            kind: ServiceKind::Database,
             ports: Vec::new(),
             env: Vec::new(),
             volumes: Vec::new(),
@@ -391,6 +396,7 @@ mod tests {
         let svc2 = Service {
             name: "redis".to_string(),
             image: "redis".to_string(),
+            kind: ServiceKind::Database,
             ports: Vec::new(),
             env: Vec::new(),
             volumes: Vec::new(),
@@ -528,6 +534,7 @@ mod tests {
         let svc = Service {
             name: "web_app".to_string(),
             image: "app:latest".to_string(),
+            kind: ServiceKind::Generic,
             ports: Vec::new(),
             env: Vec::new(),
             volumes: Vec::new(),
@@ -543,13 +550,11 @@ mod tests {
         let services = vec![svc.clone()];
 
         // Simulate health status change
-        // In real test, this would involve a separate thread or more complex mock logic
-        // For simplicity, we'll set it to Healthy right after start_all is called (which starts the container)
-        // A more robust test would check intermediate states.
         let mock_clone = mock.clone();
+        let svc_name_clone = svc.name.clone();
         thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50)); // Give start_all a chance to start polling
-            mock_clone.set_health_status(&svc.name, ContainerHealthStatus::Healthy);
+            thread::sleep(Duration::from_millis(50));
+            mock_clone.set_health_status(&svc_name_clone, ContainerHealthStatus::Healthy);
         });
 
         let result = orchestrator.start_all(&services);
@@ -569,6 +574,7 @@ mod tests {
         let svc = Service {
             name: "db_svc".to_string(),
             image: "db:latest".to_string(),
+            kind: ServiceKind::Database,
             ports: Vec::new(),
             env: Vec::new(),
             volumes: Vec::new(),
@@ -604,6 +610,7 @@ mod tests {
         let svc = Service {
             name: "no_hc_app".to_string(),
             image: "simple:latest".to_string(),
+            kind: ServiceKind::Generic,
             ports: Vec::new(),
             env: Vec::new(),
             volumes: Vec::new(),
@@ -623,7 +630,6 @@ mod tests {
         assert_eq!(mock.get_state(&svc.name), Some(ContainerState::Running));
         let commands = mock.get_commands();
         assert!(commands.contains(&format!("start:{}", svc.name)));
-        // Should NOT contain get_health calls for this service
         assert!(
             !commands
                 .iter()
