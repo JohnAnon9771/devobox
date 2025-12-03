@@ -1,3 +1,4 @@
+use crate::domain::traits::ContainerHealthStatus;
 use crate::domain::{Container, ContainerRuntime, ContainerSpec, ContainerState};
 use anyhow::{Context, Result, bail};
 use std::ffi::OsStr;
@@ -22,6 +23,39 @@ impl ContainerRuntime for PodmanAdapter {
     fn get_container(&self, name: &str) -> Result<Container> {
         let state = get_container_state(name)?;
         Ok(Container::new(name.to_string(), state))
+    }
+
+    fn get_container_health(&self, name: &str) -> Result<ContainerHealthStatus> {
+        let output = Command::new("podman")
+            .args(["inspect", name, "--format", "{{.State.Health.Status}}"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .with_context(|| format!("checando health de {name}"))?;
+
+        if !output.status.success() {
+            // If inspect fails (e.g., container not found), treat as Unknown
+            return Ok(ContainerHealthStatus::Unknown);
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        match stdout.as_str() {
+            "healthy" => Ok(ContainerHealthStatus::Healthy),
+            "unhealthy" => Ok(ContainerHealthStatus::Unhealthy),
+            "starting" => Ok(ContainerHealthStatus::Starting),
+            "" => {
+                // Check if container exists and running. If it exists but has no healthcheck, it's NotApplicable
+                let state = get_container_state(name)?;
+                match state {
+                    ContainerState::Running | ContainerState::Stopped => {
+                        Ok(ContainerHealthStatus::NotApplicable)
+                    }
+                    _ => Ok(ContainerHealthStatus::Unknown), // Container not created, etc.
+                }
+            }
+            _ => Ok(ContainerHealthStatus::Unknown),
+        }
     }
 
     fn start_container(&self, name: &str) -> Result<()> {
@@ -69,6 +103,23 @@ impl ContainerRuntime for PodmanAdapter {
         for volume in spec.volumes {
             args.push("-v".into());
             args.push(volume.clone());
+        }
+
+        if let Some(hc_cmd) = spec.healthcheck_command {
+            args.push("--healthcheck-cmd".into());
+            args.push(hc_cmd.into());
+        }
+        if let Some(hc_interval) = spec.healthcheck_interval {
+            args.push("--healthcheck-interval".into());
+            args.push(hc_interval.into());
+        }
+        if let Some(hc_timeout) = spec.healthcheck_timeout {
+            args.push("--healthcheck-timeout".into());
+            args.push(hc_timeout.into());
+        }
+        if let Some(hc_retries) = spec.healthcheck_retries {
+            args.push("--healthcheck-retries".into());
+            args.push(hc_retries.to_string());
         }
 
         for extra in spec.extra_args {

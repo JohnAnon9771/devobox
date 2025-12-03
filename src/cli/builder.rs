@@ -1,19 +1,26 @@
 use anyhow::{Context, Result, bail};
 use devobox::infra::PodmanAdapter;
-use devobox::infra::config::{databases_path, load_databases, load_mise_config};
+use devobox::infra::config::{load_app_config, load_mise_config};
 use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
+    let app_config = load_app_config(config_dir)?; // Load the merged config
+
     let runtime = Arc::new(PodmanAdapter::new());
     let container_service = Arc::new(ContainerService::new(runtime.clone()));
     let system_service = Arc::new(SystemService::new(runtime));
-    let containerfile = config_dir.join("Containerfile");
+    let containerfile_path_from_config = app_config
+        .paths
+        .containerfile
+        .clone()
+        .context("Containerfile path not set in config")?;
+    let containerfile = config_dir.join(containerfile_path_from_config);
 
     if !containerfile.exists() {
         bail!(
-            "Containerfile não encontrado em {:?}. Rode 'devobox agent install' primeiro.",
+            "Containerfile não encontrado em {:?}. Rode 'devobox setup install' primeiro.",
             config_dir
         );
     }
@@ -30,41 +37,67 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     }
 
     let context = config_dir.to_path_buf();
-    println!("🏗️  Construindo imagem Devobox (Arch)...");
-    system_service.build_image("devobox-img", &containerfile, &context)?;
+    let image_name = app_config
+        .build
+        .image_name
+        .clone()
+        .context("Image name not set in config")?;
+    println!("🏗️  Construindo imagem {} (Arch)...", image_name);
+    system_service.build_image(&image_name, &containerfile, &context)?;
 
     println!("🔍 Validando mise.toml...");
-    load_mise_config(config_dir)?;
-
-    println!(
-        "🗄️  Lendo bancos de dados em {:?}...",
-        databases_path(config_dir)
+    let mise_toml_path = config_dir.join(
+        app_config
+            .paths
+            .mise_toml
+            .clone()
+            .context("mise.toml path not set in config")?,
     );
-    let databases = load_databases(config_dir)?;
+    load_mise_config(&mise_toml_path)?;
 
-    if databases.is_empty() {
-        println!("⚠️  Nenhum banco configurado. Pulei criação de DBs.");
+    println!("🗄️  Resolvendo serviços (incluindo dependências)...");
+    let services = devobox::infra::config::resolve_all_services(config_dir, &app_config)?;
+
+    if services.is_empty() {
+        println!("⚠️  Nenhum serviço configurado. Pulei criação de serviços.");
     }
 
-    for db in &databases {
-        container_service.recreate(&db.to_spec())?;
+    for svc in &services {
+        container_service.recreate(&svc.to_spec())?;
     }
 
     let code_dir = code_mount()?;
     let ssh_dir = ssh_mount()?;
     let dev_volumes = vec![code_dir.clone(), ssh_dir.clone()];
 
+    let main_container_name = app_config
+        .container
+        .name
+        .context("Main container name not set in config")?;
+    let main_container_workdir = app_config
+        .container
+        .workdir
+        .context("Main container workdir not set in config")?;
+
     let dev_spec = devobox::domain::ContainerSpec {
-        name: "devobox",
-        image: "devobox-img",
+        name: &main_container_name,
+        image: &image_name,
         ports: &[],
         env: &[],
         network: Some("host"),
         userns: Some("keep-id"),
         security_opt: Some("label=disable"),
-        workdir: Some("/home/dev"),
+        workdir: Some(
+            main_container_workdir
+                .to_str()
+                .context("Container workdir is not valid UTF-8")?,
+        ),
         volumes: &dev_volumes,
         extra_args: &["-it"],
+        healthcheck_command: None,
+        healthcheck_interval: None,
+        healthcheck_timeout: None,
+        healthcheck_retries: None,
     };
 
     container_service.recreate(&dev_spec)?;

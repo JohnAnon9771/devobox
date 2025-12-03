@@ -57,19 +57,19 @@ Criar um **"Container de Estimação" (Pet Container)**.
 - O container é imutável e reprodutível
 - Se comporta como um **segundo computador** que está sempre lá, mas com configuração declarativa
 
-### 4. 💾 Eficiência de Recursos (O Modelo "Shared Services")
+### 4. 💾 Eficiência e Controle Granular
 
 Desenvolvedores que trabalham em microserviços ou múltiplos projetos costumam ter vários arquivos `docker-compose.yml` espalhados.
 
 **O Problema:**
-Se você subir 3 projetos, você terá 3 instâncias de Postgres e 3 de Redis rodando, consumindo 1GB+ de RAM desnecessariamente.
+- Rodar 3 instâncias de Postgres para 3 projetos diferentes consome RAM desnecessariamente.
+- Erros de "Connection Refused" porque a aplicação sobe antes do banco estar pronto.
 
-**A Solução Devobox:**
-Centralizar a infraestrutura.
-
-- **Um** Postgres. **Um** Redis
-- Todos os seus projetos usam o mesmo banco (apenas com nomes de databases diferentes)
-- Isso economiza bateria e RAM, permitindo que você desenvolva em hardware mais modesto (ou abra mais abas no Chrome 😁)
+**A Solução Devobox (v0.5.0+):**
+- **Orquestrador com Healthchecks:** O Devobox espera ativamente até que seus serviços estejam **realmente prontos**.
+- **Separação Banco vs. Serviço:** Distinção clara entre infraestrutura persistente (Postgres, Redis) e serviços auxiliares (Mailhog, Mocks).
+- **Configuração em Cascata:** Configurações globais para o dia a dia e locais para projetos específicos.
+- **Dependências entre Projetos:** Um projeto pode importar automaticamente a infraestrutura de outro.
 
 ---
 
@@ -113,13 +113,13 @@ devobox init
 
 ### Após a Instalação
 
-O comando `devobox init` cuida de toda a preparação do ambiente:
+O comando `devobox init` cuida de tudo:
+1. Cria configs em `~/.config/devobox`.
+2. Constrói a imagem base com ferramentas do `mise.toml`.
+3. Instala ferramentas de IA globalmente.
+4. Prepara os containers de serviço.
 
-1. Copia os templates (`Containerfile` e `databases.yml`) para `~/.config/devobox`
-2. Constrói a imagem base com todas as ferramentas definidas em `mise.toml`
-3. Cria os containers (devobox + bancos definidos no `databases.yml`)
-
-**Ainda mais fácil:** Se você executar `devobox` sem fazer o setup, ele detecta automaticamente e executa o `init` para você!
+**Ainda mais fácil:** Se você executar `devobox` sem fazer o setup, ele detecta e executa o `init` automaticamente!
 
 ## 🛠️ Comandos
 
@@ -128,12 +128,12 @@ O comando `devobox init` cuida de toda a preparação do ambiente:
 ```bash
 # Abrir shell de desenvolvimento (comando padrão)
 devobox                    # Abre o shell (auto-setup se necessário)
-devobox -d                 # Abre o shell com bancos de dados
+devobox -d                 # Abre o shell com TODOS os serviços (bancos + genéricos) iniciados
 devobox --with-dbs         # Forma longa de -d
 
 # Comandos alternativos
-devobox shell              # Shell sem bancos
-devobox dev                # Shell com bancos (equivale a -d)
+devobox shell              # Shell sem iniciar serviços automaticamente
+devobox dev                # Shell com serviços (equivale a -d)
 
 # Gerenciar ambiente
 devobox init               # Setup inicial completo (install + build)
@@ -147,10 +147,14 @@ devobox status             # Ver status de todos os containers
 
 ```bash
 # Subir/Parar containers
-devobox up                 # Sobe devobox + todos os bancos
+devobox up                 # Sobe tudo (Pet + Bancos + Serviços + Dependências)
 devobox start              # Alias de 'up'
 devobox down               # Para todos os containers
 devobox stop               # Alias de 'down'
+
+# Filtros de Inicialização
+devobox up --dbs-only      # Sobe apenas o que é 'type: database'
+devobox up --services-only # Sobe apenas o que é 'type: generic'
 
 # Ver status
 devobox status             # Lista todos os containers e estados
@@ -161,481 +165,168 @@ devobox status             # Lista todos os containers e estados
 ```bash
 # Shell com opções especiais
 devobox --auto-stop        # Para tudo ao sair (economiza recursos)
-devobox -d --auto-stop     # Com bancos + auto-stop
-devobox shell --with-dbs   # Shell com bancos (forma explícita)
+devobox -d --auto-stop     # Com serviços + auto-stop
 
 # Reconstruir com opções
 devobox rebuild --skip-cleanup   # Reconstrói sem limpar cache
 ```
 
-**🎯 Dicas de Uso:**
-
-- O comando `devobox` (sem argumentos) é o jeito mais rápido de começar a trabalhar
-- Ele mapeia automaticamente seu diretório atual: `cd ~/code/projeto1 && devobox` já te coloca em `/home/dev/code/projeto1`
-- Na primeira execução, faz setup automático - você não precisa se preocupar com nada!
-
 **⚡ Modo Auto-Stop:**
 
-O flag `--auto-stop` encerra **todos os containers** automaticamente quando você sai do shell, liberando recursos do sistema:
+O flag `--auto-stop` encerra **todos os containers** automaticamente quando você sai do shell. Ideal para economizar bateria e RAM em sessões rápidas.
 
 ```bash
 $ devobox -d --auto-stop
-🔌 Iniciando pg...
-🔌 Iniciando redis...
-🚀 Entrando no devobox (workdir Some("/home/dev/code/myproject"))
+🚀 Iniciando todos os serviços...
+  🔌 Iniciando pg... ✓
+💖 Verificando healthchecks...
+  🩺 Aguardando pg ficar saudável... ✅ Saudável!
+🚀 Entrando no devobox...
 
-# [Você trabalha normalmente]
+# [Você trabalha...]
 
 $ exit
 🧹 Encerrando todos os containers...
-  💤 Parando devobox... ✓
-  💤 Parando pg... ✓
-  💤 Parando redis... ✓
 ✅ Containers encerrados
 ```
 
-**Quando usar `--auto-stop`:**
+### 🎛️ Controle Granular: Bancos vs. Serviços
 
-- ✅ Sessões rápidas de desenvolvimento
-- ✅ Quando quer economizar RAM/CPU automaticamente
-- ✅ Máquinas com recursos limitados
-- ✅ Trabalho em múltiplos projetos no mesmo dia
+O Devobox permite diferenciar entre **Bancos de Dados** (pesados, persistentes) e **Serviços Genéricos** (leves, auxiliares).
 
-**Quando NÃO usar `--auto-stop`:**
-
-- ❌ Sessões longas com múltiplas entradas/saídas
-- ❌ Quando vai voltar ao shell logo em seguida
-- ❌ Múltiplas sessões shell simultâneas (terminais diferentes)
-
-### 🗄️ Gerenciamento de Bancos de Dados
+#### Gerenciar Bancos (`type: database`)
 
 ```bash
-# Iniciar todos os bancos
-devobox db start
-
-# Iniciar banco específico
-devobox db start pg
-devobox db start redis
-
-# Parar todos os bancos
-devobox db stop
-
-# Parar banco específico
-devobox db stop pg
-
-# Reiniciar bancos
-devobox db restart [pg|redis]
-
-# Ver status dos bancos
+devobox db start           # Inicia todos os bancos
+devobox db start pg        # Inicia apenas o Postgres
+devobox db stop            # Para todos os bancos
+devobox db restart         # Reinicia bancos
 devobox db status
+```
+
+#### Gerenciar Serviços Genéricos (`type: generic`)
+
+```bash
+devobox service start      # Inicia todos os serviços genéricos (ex: mailhog, redis-cache)
+devobox service start queue # Inicia apenas a fila
+devobox service stop       # Para serviços genéricos
+devobox service restart
+devobox service status
 ```
 
 ### 🧹 Limpeza de Recursos
 
-O Devobox inclui comandos de limpeza para remover recursos não utilizados do Podman e liberar espaço em disco:
+O Devobox inclui comandos de limpeza para manter seu sistema enxuto:
 
 ```bash
-# Limpar tudo (containers parados, imagens não utilizadas, volumes órfãos e cache de build)
+# Limpar tudo (containers parados, imagens não utilizadas, volumes órfãos e cache)
 devobox cleanup
 
-# Limpar apenas containers parados
+# Limpezas específicas
 devobox cleanup --containers
-
-# Limpar apenas imagens não utilizadas
 devobox cleanup --images
-
-# Limpar apenas volumes órfãos
 devobox cleanup --volumes
-
-# Limpar apenas cache de build
 devobox cleanup --build-cache
 
-# Combinações (limpar containers e imagens)
-devobox cleanup --containers --images
+# Opção nuclear (CUIDADO!)
+devobox cleanup --nuke  # Remove TUDO do Podman no sistema. Comece do zero.
 ```
 
-**Limpeza Automática:**
+## 📁 Configuração e Estrutura
 
-- O comando `devobox rebuild` **executa limpeza automática** antes de construir
-- Remove containers parados, imagens não utilizadas e cache de build
-- **Preserva volumes de dados** dos bancos de dados
-- Use `--skip-cleanup` para pular a limpeza automática
+### Configuração Global vs. Local
 
-**O que cada operação remove:**
+O Devobox suporta uma configuração em cascata:
 
-| Operação        | Comando Podman              | O que remove                               |
-| --------------- | --------------------------- | ------------------------------------------ |
-| `--containers`  | `podman container prune -f` | Containers parados                         |
-| `--images`      | `podman image prune -af`    | Imagens não utilizadas e dangling          |
-| `--volumes`     | `podman volume prune -f`    | Volumes órfãos (não anexados a containers) |
-| `--build-cache` | `podman builder prune -af`  | Cache de build (layers intermediárias)     |
-| `--nuke`        | `system prune -a --volumes` | **DESTRUTIVO**: Remove TUDO (imagens, containers, volumes, cache) |
+1.  **Global (`~/.config/devobox/`):** Configuração padrão para seu "Pet Container".
+2.  **Local (`./devobox.toml`):** Configuração específica do projeto.
 
-> **☢️ ZONA DE PERIGO:** O comando `devobox cleanup --nuke` é a "arma nuclear". Ele apaga **todas** as imagens, containers e volumes do Podman no seu sistema. Use isso apenas quando precisar recuperar o máximo de espaço em disco possível e estiver disposto a baixar/reconstruir tudo do zero na próxima vez.
+### Exemplo de `devobox.toml` Local
 
-> **💡 Dica:** Execute `devobox cleanup` periodicamente para manter seu sistema limpo e liberar espaço em disco.
+Use para declarar dependências de outros projetos:
 
-## 📁 Estrutura de Diretórios
+```toml
+# ~/code/frontend/devobox.toml
 
-### No Repositório (antes da instalação)
+[project]
+name = "meu-frontend"
 
-```
-devobox/
-├── config/
-│   ├── Containerfile    → Definição da imagem
-│   └── databases.yml    → Bancos de dados de exemplo (YAML)
-├── docs/
-│   └── architecture.png → Diagrama de arquitetura
-└── Cargo.toml           → Crate Rust do CLI `devobox`
+[dependencies]
+# O Devobox vai ler o services.yml desses caminhos e subir tudo junto!
+include_projects = [
+    "../backend-api",
+    "../auth-service"
+]
+
+[container]
+workdir = "/home/dev/code/frontend"
 ```
 
-### Pós-Instalação
+### Arquivo `services.yml`
 
-```
-~/code/                  → Seus projetos (mapeado para /home/dev/code)
-~/.config/devobox/       → Configuração instalada
-  ├── Containerfile      → Definição da imagem
-  └── databases.yml      → Bancos de dados em YAML
-~/.local/bin/
-  └── devobox            → Binário Rust
-```
-
-**Importante:** Seus projetos devem estar em `~/code` para serem acessíveis dentro do container.
-
-## 🗄️ Bancos de Dados
-
-### PostgreSQL 16
+Agora suporta **Tipos** e **Healthchecks**:
 
 ```yaml
-Host: localhost
-Porta: 5432
-Usuário: dev
-Senha: devpass
-Database padrão: dev_default
-```
+services:
+  # Banco de Dados (Controlado por 'devobox db')
+  - name: pg
+    type: database
+    image: docker.io/postgres:16
+    ports: ["5432:5432"]
+    env:
+      - POSTGRES_PASSWORD=dev
+    healthcheck_command: "pg_isready -U dev"
+    healthcheck_interval: "5s"
+    healthcheck_timeout: "3s"
+    healthcheck_retries: 5
 
-```bash
-# Conexão via CLI
-psql -h localhost -U dev -d dev_default
-
-# Connection string para apps
-postgresql://dev:devpass@localhost:5432/dev_default
-```
-
-### Redis 7
-
-```yaml
-Host: localhost
-Porta: 6379
-Senha: (sem autenticação)
-```
-
-```bash
-# Conexão via CLI
-redis-cli
-
-# Connection string para apps
-redis://localhost:6379
+  # Serviço Genérico (Controlado por 'devobox service')
+  # Se 'type' for omitido, é 'generic' por padrão
+  - name: mailhog
+    type: generic
+    image: docker.io/mailhog/mailhog:latest
+    ports: ["1025:1025", "8025:8025"]
 ```
 
 ## 🔧 Stack Tecnológico
 
 ### Container Base: Debian Bookworm
 
-**Ferramentas de Desenvolvimento:**
-
-- `build-essential` - Compiladores (gcc, make, etc)
-- `git`, `curl`, `wget`, `openssh`
-- `vim`, `man-db`
-
-**Bibliotecas do Sistema:**
-
-- `libffi-dev`, `zlib1g-dev`, `libssl-dev`, `libreadline-dev`
-- `libncurses5-dev`, `libyaml-dev`, `libgdbm-dev`
-
-**Clientes de Banco:**
-
-- `libpq-dev` (libpq)
-- `redis`
-
-**Processamento de Mídia:**
-
-- `imagemagick` - Manipulação de imagens
-- `vips` - Processamento de imagens de alta performance
-
-**Ferramentas de Rede:**
-
-- `iputils-ping`, `iproute2`, `dnsutils`
+**Ferramentas:**
+- `build-essential`, `git`, `curl`, `wget`, `openssh`, `vim`
 
 **Gerenciador de Runtime:**
+- **[Mise](https://mise.jdx.dev/)** - Gerencia versões de linguagens (Node, Rust, Python, etc) globalmente dentro do container.
 
-- **[Mise](https://mise.jdx.dev/)** - Gerenciador de versões (sucessor do asdf)
-  - Node.js, Ruby, Python, Go, Rust, Elixir, etc
-  - Instalação automática baseada em `.tool-versions` ou `.mise.toml`
+**IA Integration:**
+- Ferramentas como `@anthropic-ai/claude-code` e `@google/gemini-cli` instaladas globalmente.
 
-## 📝 Workflow Completo
+## 📚 Casos de Uso Avançados
 
-### Fluxo Simplificado (Recomendado)
+### Orquestração de Microsserviços ("App as a Service")
 
-```bash
-# 1. Primeira vez: fazer setup
-devobox init
-# Ou apenas: devobox (faz auto-setup)
+Você sabia que pode usar o Devobox para subir automaticamente outros projetos dos quais você depende?
 
-# 2. Navegar para seu projeto
-cd ~/code/meu-projeto
+Imagine que você está trabalhando no Frontend (`my-frontend`) e precisa que a API (`my-api`) esteja rodando. Você pode configurar o `my-api` para rodar como um container auxiliar, gerenciado automaticamente pelo Devobox.
 
-# 3. Abrir shell com bancos de dados
-devobox -d
-# Ou: devobox (sem bancos)
-
-# 4. Trabalhar normalmente dentro do container
-npm install
-bundle install
-rails db:migrate
-rails server
-
-# 5. Sair
-exit
-```
-
-### Fluxo Completo com Customizações
-
-```bash
-# 1. Definir ferramentas (no host)
-# Edite ~/.config/devobox/mise.toml
-# [tools]
-# node = "20.11.0"
-# ruby = "3.2.2"
-
-# 2. Reconstruir ambiente (aplica mudanças)
-devobox rebuild
-
-# 3. Navegar para seu projeto
-cd ~/code/meu-projeto
-
-# 4. Iniciar ambiente com bancos e auto-stop
-devobox -d --auto-stop
-
-# 5. Instalar dependências do projeto
-npm install
-bundle install
-
-# 6. Criar database no Postgres
-createdb meu_projeto_dev
-
-# 7. Rodar migrações/seeds
-rails db:migrate
-npm run migrate
-
-# 8. Desenvolver normalmente
-rails server
-# ou
-npm run dev
-
-# 9. Sair do container (auto-stop para tudo)
-exit
-```
-
-## 🏗️ Arquitetura Técnica
-
-### Containers Criados
-
-1. **devobox** - Container principal de desenvolvimento
-   - Imagem: `devobox-img` (Debian Bookworm customizado)
-   - Usuário: `dev` (não-root)
-   - Network: `--network host` (performance máxima)
-   - Volumes:
-     - `~/code:/home/dev/code` (bind mount - projetos)
-   - Segurança: `--userns=keep-id` (preserva UID/GID do host)
-
-2. **postgres** - PostgreSQL 16
-   - Estado padrão: Parado (start sob demanda)
-   - Network: Bridge (port mapping `-p 5432:5432`)
-   - Porta: 5432
-   - Dados: Persistem entre restarts, perdidos no rebuild
-
-3. **redis** - Redis 7 Alpine
-   - Estado padrão: Parado (start sob demanda)
-   - Network: Bridge (port mapping `-p 6379:6379`)
-   - Porta: 6379
-   - Dados: Persistem entre restarts, perdidos no rebuild
-
-### Decisões de Design
-
-**Por que `--network host` (apenas no devobox)?**
-
-- O container **devobox** usa `--network host` para performance máxima
-- Postgres e Redis usam **bridge networking** com port mapping (`-p`)
-- Isso permite que aplicações no devobox acessem `localhost:5432` e `localhost:6379` diretamente
-- Simplifica configuração: `DATABASE_URL=postgresql://dev:devpass@localhost:5432/mydb`
-- Elimina latência de bridge networking para o ambiente de desenvolvimento
-
-**Por que montar `~/.ssh` do host?**
-
-- Permite usar Git via SSH sem configurar chaves dentro do container
-- Montado como **read-only** (`:ro`) por segurança
-- Suas chaves SSH do host funcionam automaticamente no container
-- Facilita push/pull em repositórios privados
-
-**Por que `--userns=keep-id`?**
-
-- Arquivos criados no container pertencem ao seu usuário no host
-- Evita problemas de permissão com `git`, `npm`, `bundle`
-- UID/GID dentro do container = UID/GID no host
-
-**Por que `--security-opt label=disable`?**
-
-- Desativa SELinux labeling (compatibilidade com diferentes distros)
-- Necessário para bind mounts funcionarem corretamente
-
-**Por que containers separados para DBs?**
-
-- Permite gerenciamento granular (start/stop individual)
-- Facilita upgrade de versões (ex: Postgres 16 → 17)
-- Economiza recursos (inicia apenas o que precisa)
-
-**Persistência de Dados:**
-
-- ✅ **Ferramentas Mise**: Integradas na imagem Docker (atualizadas via `rebuild`)
-- ✅ **Projetos**: Persistem via bind mount `~/code` (seus arquivos no host)
-- ✅ **Chaves SSH**: Compartilhadas do host via bind mount read-only
-- ⚠️ **Histórico bash**: NÃO persiste (perdido ao executar `rebuild`)
-- ⚠️ **Bancos de dados**: Persistem entre restarts (`down`/`up`), mas são **perdidos** ao executar `rebuild`
-- 💡 **Dica**: Para persistência permanente de dados de banco, declare volumes nomeados no `databases.yml`
-
-## ⚙️ Customização
-
-### Fluxo de Customização
-
-```bash
-# 1. Instalar apenas os arquivos de configuração
-devobox install
-
-# 2. Editar as configurações
-vim ~/.config/devobox/Containerfile    # Adicionar ferramentas
-vim ~/.config/devobox/mise.toml        # Configurar versões
-vim ~/.config/devobox/databases.yml    # Configurar bancos
-
-# 3. Construir com as mudanças
-devobox rebuild
-```
-
-### Adicionar Ferramentas ao Container
-
-Edite `~/.config/devobox/Containerfile`:
-
-```dockerfile
-RUN apt-get update && apt-get install -y \
-    libpq-dev redis-tools imagemagick libvips \
-    sua-ferramenta-aqui
-```
-
-Depois reconstrua:
-
-```bash
-devobox rebuild
-```
-
-### Adicionar Novos Bancos de Dados
-
-1. Edite `~/.config/devobox/databases.yml` e adicione entradas YAML com `name`, `image`, `ports` e `env` (opcionais):
-
-```yaml
-databases:
-  - name: mongodb
-    image: docker.io/mongo:7
-    ports: ["27017:27017"]
-    env: []
-```
-
-2. Reconstrua:
-
-```bash
-devobox rebuild
-```
-
-### Personalizar Prompt
-
-O prompt é gerenciado pelo **Starship**. Para customizar, edite `~/.config/devobox/starship.toml`.
-
-Consulte a [documentação do Starship](https://starship.rs/config/) para mais detalhes.
+[➡️ Leia o guia completo de Microsserviços](docs/MICROSERVICES.md)
 
 ## 🐛 Troubleshooting
 
 ### Container não inicia
-
 ```bash
-# Verificar logs
 podman logs devobox
-
-# Forçar reconstrução
-podman rm -f devobox postgres redis
 devobox rebuild
 ```
 
-### Permissões de arquivo incorretas
-
-O Devobox usa `--userns=keep-id` para preservar seu UID/GID. Se encontrar problemas:
-
-```bash
-# Dentro do container, verificar UID
-id
-
-# No host, deve ser o mesmo
-id
-```
-
-### Bancos de dados não conectam
-
-```bash
-# Verificar se estão rodando
-devobox db status
-
-# Ver logs do Postgres
-podman logs postgres
-
-# Ver logs do Redis
-podman logs redis
-
-# Reiniciar
-devobox db restart
-```
-
-### Mise não encontra ferramentas
-
-As ferramentas devem ser definidas no `mise.toml` antes do build.
-
-1. Edite `~/.config/devobox/mise.toml`
-2. Rode `devobox rebuild`
+### Permissões de arquivo
+O Devobox usa `--userns=keep-id` para mapear seu UID do host, evitando problemas de `permission denied` em arquivos criados dentro do container.
 
 ### Performance lenta de I/O
-
-Se você estiver usando um filesystem com CoW (Btrfs, ZFS):
-
+Se usar Btrfs/ZFS, desabilite Copy-on-Write para o diretório do Podman:
 ```bash
-# Desabilitar CoW no diretório de volumes do Podman
 sudo chattr +C ~/.local/share/containers/storage
 ```
-
-## 🎓 Filosofia de Uso
-
-O Devobox transforma seu "Inner Loop" (ciclo código → teste → debug) em um **produto profissional**.
-
-**O que você NÃO precisa mais fazer:**
-
-- ❌ Instalar múltiplas versões de Ruby/Node via RVM/NVM no host
-- ❌ Debugar conflitos de biblioteca após `apt-get upgrade`
-- ❌ Rodar 5 instâncias de Postgres para 5 projetos
-- ❌ Poluir seu sistema com dependências de compilação
-
-**O que você GANHA:**
-
-- ✅ Sistema host limpo e estável
-- ✅ Ambiente de desenvolvimento reproduzível
-- ✅ Performance nativa (zero overhead de VM)
-- ✅ Gerenciamento centralizado de serviços
-- ✅ Facilidade para resetar ambiente (1 comando)
 
 ---
 

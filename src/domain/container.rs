@@ -30,21 +30,39 @@ pub struct ContainerSpec<'a> {
     pub workdir: Option<&'a str>,
     pub volumes: &'a [String],
     pub extra_args: &'a [&'a str],
+    pub healthcheck_command: Option<&'a str>,
+    pub healthcheck_interval: Option<&'a str>,
+    pub healthcheck_timeout: Option<&'a str>,
+    pub healthcheck_retries: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ServiceKind {
+    #[default]
+    Generic,
+    Database,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct Database {
+pub struct Service {
     pub name: String,
     pub image: String,
+    #[serde(default, rename = "type")]
+    pub kind: ServiceKind,
     #[serde(default)]
     pub ports: Vec<String>,
     #[serde(default)]
     pub env: Vec<String>,
     #[serde(default)]
     pub volumes: Vec<String>,
+    pub healthcheck_command: Option<String>,
+    pub healthcheck_interval: Option<String>, // e.g., "5s"
+    pub healthcheck_timeout: Option<String>,  // e.g., "3s"
+    pub healthcheck_retries: Option<u32>,
 }
 
-impl Database {
+impl Service {
     pub fn to_spec(&self) -> ContainerSpec {
         ContainerSpec {
             name: &self.name,
@@ -57,6 +75,10 @@ impl Database {
             security_opt: None,
             workdir: None,
             extra_args: &[],
+            healthcheck_command: self.healthcheck_command.as_deref(),
+            healthcheck_interval: self.healthcheck_interval.as_deref(),
+            healthcheck_timeout: self.healthcheck_timeout.as_deref(),
+            healthcheck_retries: self.healthcheck_retries,
         }
     }
 }

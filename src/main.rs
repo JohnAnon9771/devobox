@@ -65,12 +65,24 @@ enum Commands {
     },
     /// Sobe devobox e todos os bancos configurados
     #[command(alias = "start")]
-    Up,
+    Up {
+        /// Iniciar apenas bancos de dados
+        #[arg(long)]
+        dbs_only: bool,
+        /// Iniciar apenas serviços genéricos (não bancos)
+        #[arg(long)]
+        services_only: bool,
+    },
     /// Para todos os containers
     #[command(alias = "stop")]
     Down,
     /// Mostra status de todos os containers
     Status,
+    /// Controle de serviços genéricos
+    Service {
+        #[command(subcommand)]
+        action: ServiceAction,
+    },
     /// Controle de bancos de dados
     Db {
         #[command(subcommand)]
@@ -99,6 +111,27 @@ enum Commands {
     },
     /// Atualiza o devobox para a versão mais recente disponível no GitHub
     Update,
+}
+
+#[derive(Subcommand)]
+enum ServiceAction {
+    /// Inicia serviço(s)
+    Start {
+        /// Nome do serviço específico (opcional)
+        service: Option<String>,
+    },
+    /// Para serviço(s)
+    Stop {
+        /// Nome do serviço específico (opcional)
+        service: Option<String>,
+    },
+    /// Reinicia serviço(s)
+    Restart {
+        /// Nome do serviço específico (opcional)
+        service: Option<String>,
+    },
+    /// Mostra status dos serviços
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -132,7 +165,7 @@ fn main() -> Result<()> {
         }
         Some(Commands::Init { skip_cleanup }) => {
             println!("📦 Passo 1/2: Instalando configurações...");
-            cli::agent::install(&cli.config_dir)?;
+            cli::setup::install(&cli.config_dir)?;
 
             println!("\n📦 Passo 2/2: Construindo ambiente...");
             cli::builder::build(&cli.config_dir, skip_cleanup)?;
@@ -141,7 +174,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some(Commands::Install) => {
-            cli::agent::install(&cli.config_dir)?;
+            cli::setup::install(&cli.config_dir)?;
             println!("\n✅ Configurações instaladas em {:?}", cli.config_dir);
             println!("💡 Dica: Edite os arquivos e depois rode 'devobox build'");
             Ok(())
@@ -154,9 +187,24 @@ fn main() -> Result<()> {
             auto_stop,
         }) => cli::runtime::shell(&cli.config_dir, with_dbs, auto_stop),
         Some(Commands::Dev { auto_stop }) => cli::runtime::shell(&cli.config_dir, true, auto_stop),
-        Some(Commands::Up) => cli::runtime::up(&cli.config_dir),
+        Some(Commands::Up {
+            dbs_only,
+            services_only,
+        }) => cli::runtime::up(&cli.config_dir, dbs_only, services_only),
         Some(Commands::Down) => cli::runtime::down(&cli.config_dir),
         Some(Commands::Status) => cli::runtime::status(&cli.config_dir),
+        Some(Commands::Service { action }) => match action {
+            ServiceAction::Start { service } => {
+                cli::runtime::svc_start(&cli.config_dir, service.as_deref())
+            }
+            ServiceAction::Stop { service } => {
+                cli::runtime::svc_stop(&cli.config_dir, service.as_deref())
+            }
+            ServiceAction::Restart { service } => {
+                cli::runtime::svc_restart(&cli.config_dir, service.as_deref())
+            }
+            ServiceAction::Status => cli::runtime::status(&cli.config_dir),
+        },
         Some(Commands::Db { action }) => match action {
             DbAction::Start { service } => {
                 cli::runtime::db_start(&cli.config_dir, service.as_deref())

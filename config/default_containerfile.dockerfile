@@ -69,10 +69,9 @@ RUN --mount=type=cache,target=/home/dev/.cache/mise,uid=1000,gid=1000 \
 
 # AI tools installation with NPM Cache Mount
 RUN --mount=type=cache,target=/home/dev/.npm,uid=1000,gid=1000 \
-    mise exec -- npm install -g \
-    @anthropic-ai/claude-code \
-    @openai/codex \
-    @google/gemini-cli
+    mise use -g npm:@anthropic-ai/claude-code && \
+    mise use -g npm:@openai/codex && \
+    mise use -g npm:@google/gemini-cli
 
 # Fix permissions for /home/dev
 USER root
