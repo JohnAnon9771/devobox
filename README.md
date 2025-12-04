@@ -12,6 +12,8 @@ O **Devobox** é uma resposta de engenharia para o dilema moderno do desenvolvim
 
 Este projeto não é apenas "rodar containers". É criar uma **Estação de Trabalho Híbrida** que resolve 4 problemas fundamentais do desenvolvimento moderno.
 
+[🥊 Devobox vs. Docker Compose vs. Local: Entenda as diferenças](docs/COMPARISON.md)
+
 ---
 
 ## 🏛️ Os 4 Pilares do Devobox
