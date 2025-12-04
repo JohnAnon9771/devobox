@@ -6,6 +6,8 @@
 
 > _Desenvolva sem poluir seu sistema, sem perder performance e sem reinventar o ambiente a cada projeto._
 
+[🧭 Novo no Devobox? Comece pelo Guia de Workflow (Como trabalhar)](docs/WORKFLOW.md)
+
 ## 🎯 O Problema
 
 O **Devobox** é uma resposta de engenharia para o dilema moderno do desenvolvimento no Linux: **"Como manter meu sistema limpo e estável sem sacrificar o desempenho e a ergonomia do desenvolvimento nativo?"**
