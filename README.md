@@ -6,7 +6,7 @@
 
 > _Desenvolva sem poluir seu sistema, sem perder performance e sem reinventar o ambiente a cada projeto._
 
-[🧭 Novo no Devobox? Comece pelo Guia de Workflow (Como trabalhar)](docs/WORKFLOW.md)
+[🧭 Novo no Devobox? Comece pelo Guia de Workflow (Como trabalhar)](docs/workflow.md)
 
 ## 🎯 O Problema
 
@@ -14,7 +14,7 @@ O **Devobox** é uma resposta de engenharia para o dilema moderno do desenvolvim
 
 Este projeto não é apenas "rodar containers". É criar uma **Estação de Trabalho Híbrida** que resolve 4 problemas fundamentais do desenvolvimento moderno.
 
-[🥊 Devobox vs. Docker Compose vs. Local: Entenda as diferenças](docs/COMPARISON.md)
+[🥊 Devobox vs. Docker Compose vs. Local: Entenda as diferenças](docs/comparison.md)
 
 ---
 
@@ -313,7 +313,7 @@ Você sabia que pode usar o Devobox para subir automaticamente outros projetos d
 
 Imagine que você está trabalhando no Frontend (`my-frontend`) e precisa que a API (`my-api`) esteja rodando. Você pode configurar o `my-api` para rodar como um container auxiliar, gerenciado automaticamente pelo Devobox.
 
-[➡️ Leia o guia completo de Microsserviços](docs/MICROSERVICES.md)
+[➡️ Leia o guia completo de Microsserviços](docs/microservices.md)
 
 ## 🐛 Troubleshooting
 
