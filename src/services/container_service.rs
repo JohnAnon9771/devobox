@@ -86,17 +86,7 @@ impl ContainerService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::domain::{Service, ServiceKind};
-    use crate::test_support::MockRuntime;
-
-    fn create_test_service() -> (ContainerService, Arc<MockRuntime>) {
-        let mock = Arc::new(MockRuntime::new());
-        let service = ContainerService::new(mock.clone());
-        (service, mock)
-    }
-
-    // ... (existing tests)
 
     #[test]
     fn test_service_spec_conversion() {
@@ -115,6 +105,5 @@ mod tests {
 
         let spec = svc.to_spec();
         assert_eq!(spec.name, "test_svc");
-        // ... assertions
     }
 }
