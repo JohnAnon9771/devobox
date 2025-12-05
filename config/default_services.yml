@@ -3,9 +3,10 @@
 #
 # Formatos aceitos:
 #
-# 1) Raiz com chave "databases":
-# databases:
+# 1) Raiz com chave "services":
+# services:
 #   - name: pg
+#     type: database
 #     image: docker.io/postgres:15
 #     ports: ["5432:5432"]
 #     env:
@@ -13,17 +14,20 @@
 #
 # 2) Lista direta:
 # - name: redis
+#   type: database
 #   image: docker.io/redis:7
 #   ports:
 #     - "6379:6379"
 #   env: []
 
-databases:
+services:
   - name: pg
+    type: database
     image: docker.io/postgres:16
     ports: ["5432:5432"]
     env:
       - POSTGRES_PASSWORD=dev
   - name: redis
+    type: database
     image: docker.io/redis:7
     ports: ["6379:6379"]

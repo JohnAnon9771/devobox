@@ -1,3 +1,4 @@
+use crate::domain::traits::ContainerHealthStatus;
 use crate::domain::{Container, ContainerRuntime, ContainerSpec, ContainerState};
 use anyhow::{Result, bail};
 use std::collections::HashMap;
@@ -10,6 +11,7 @@ pub struct MockContainer {
     pub name: String,
     pub state: ContainerState,
     pub spec: Option<MockContainerSpec>,
+    pub health_status: Option<ContainerHealthStatus>,
 }
 
 #[derive(Debug, Clone)]
@@ -18,6 +20,10 @@ pub struct MockContainerSpec {
     pub image: String,
     pub ports: Vec<String>,
     pub env: Vec<String>,
+    pub healthcheck_command: Option<String>,
+    pub healthcheck_interval: Option<String>,
+    pub healthcheck_timeout: Option<String>,
+    pub healthcheck_retries: Option<u32>,
 }
 
 pub struct MockRuntime {
@@ -42,6 +48,7 @@ impl MockRuntime {
                 name: name.to_string(),
                 state,
                 spec: None,
+                health_status: None,
             },
         );
     }
@@ -66,6 +73,13 @@ impl MockRuntime {
             .unwrap()
             .get(name)
             .map(|c| c.state.clone())
+    }
+
+    #[allow(dead_code)]
+    pub fn set_health_status(&self, name: &str, status: ContainerHealthStatus) {
+        if let Some(container) = self.containers.write().unwrap().get_mut(name) {
+            container.health_status = Some(status);
+        }
     }
 
     fn record_command(&self, cmd: &str) {
@@ -104,6 +118,19 @@ impl ContainerRuntime for MockRuntime {
         Ok(Container::new(name.to_string(), state))
     }
 
+    fn get_container_health(&self, name: &str) -> Result<ContainerHealthStatus> {
+        self.record_command(&format!("get_health:{}", name));
+        self.check_fail("get_health")?;
+
+        let containers = self.containers.read().unwrap();
+        let status = containers
+            .get(name)
+            .and_then(|c| c.health_status.clone())
+            .unwrap_or(ContainerHealthStatus::NotApplicable); // Default if not explicitly set
+
+        Ok(status)
+    }
+
     fn start_container(&self, name: &str) -> Result<()> {
         self.record_command(&format!("start:{}", name));
         self.check_fail("start")?;
@@ -137,7 +164,12 @@ impl ContainerRuntime for MockRuntime {
                     image: spec.image.to_string(),
                     ports: spec.ports.to_vec(),
                     env: spec.env.to_vec(),
+                    healthcheck_command: spec.healthcheck_command.map(|s| s.to_string()),
+                    healthcheck_interval: spec.healthcheck_interval.map(|s| s.to_string()),
+                    healthcheck_timeout: spec.healthcheck_timeout.map(|s| s.to_string()),
+                    healthcheck_retries: spec.healthcheck_retries,
                 }),
+                health_status: None, // Initial health status is not set
             },
         );
         Ok(())

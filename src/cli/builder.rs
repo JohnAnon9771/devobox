@@ -1,19 +1,35 @@
 use anyhow::{Context, Result, bail};
 use devobox::infra::PodmanAdapter;
-use devobox::infra::config::{databases_path, load_databases, load_mise_config};
+use devobox::infra::config::{load_app_config, load_mise_config};
 use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+const CONTAINER_SSH_SOCK_PATH: &str = "/run/host-services/ssh-auth.sock";
+
+const PERSISTENT_MISE_SHARE_PATH: &str = "/home/dev/.local/share/mise";
+const PERSISTENT_MISE_CONFIG_PATH: &str = "/home/dev/.config/mise";
+const PERSISTENT_CARGO_PATH: &str = "/home/dev/.cargo";
+const PERSISTENT_NVIM_SHARE_PATH: &str = "/home/dev/.local/share/nvim";
+const PERSISTENT_NVIM_STATE_PATH: &str = "/home/dev/.local/state/nvim";
+const PERSISTENT_BASH_HISTORY_PATH: &str = "/home/dev/.local/state/bash";
+
 pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
+    let app_config = load_app_config(config_dir)?; // Load the merged config
+
     let runtime = Arc::new(PodmanAdapter::new());
     let container_service = Arc::new(ContainerService::new(runtime.clone()));
     let system_service = Arc::new(SystemService::new(runtime));
-    let containerfile = config_dir.join("Containerfile");
+    let containerfile_path_from_config = app_config
+        .paths
+        .containerfile
+        .clone()
+        .context("Containerfile path not set in config")?;
+    let containerfile = config_dir.join(containerfile_path_from_config);
 
     if !containerfile.exists() {
         bail!(
-            "Containerfile não encontrado em {:?}. Rode 'devobox agent install' primeiro.",
+            "Containerfile não encontrado em {:?}. Rode 'devobox setup install' primeiro.",
             config_dir
         );
     }
@@ -30,46 +46,100 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     }
 
     let context = config_dir.to_path_buf();
-    println!("🏗️  Construindo imagem Devobox (Arch)...");
-    system_service.build_image("devobox-img", &containerfile, &context)?;
+    let image_name = app_config
+        .build
+        .image_name
+        .clone()
+        .context("Image name not set in config")?;
+    println!("🏗️  Construindo imagem {} (Arch)...", image_name);
+    system_service.build_image(&image_name, &containerfile, &context)?;
 
     println!("🔍 Validando mise.toml...");
-    load_mise_config(config_dir)?;
-
-    println!(
-        "🗄️  Lendo bancos de dados em {:?}...",
-        databases_path(config_dir)
+    let mise_toml_path = config_dir.join(
+        app_config
+            .paths
+            .mise_toml
+            .clone()
+            .context("mise.toml path not set in config")?,
     );
-    let databases = load_databases(config_dir)?;
+    load_mise_config(&mise_toml_path)?;
 
-    if databases.is_empty() {
-        println!("⚠️  Nenhum banco configurado. Pulei criação de DBs.");
+    println!("🗄️  Resolvendo serviços (incluindo dependências)...");
+    let services = devobox::infra::config::resolve_all_services(config_dir, &app_config)?;
+
+    if services.is_empty() {
+        println!("⚠️  Nenhum serviço configurado. Pulei criação de serviços.");
     }
 
-    for db in &databases {
-        container_service.recreate(&db.to_spec())?;
+    for svc in &services {
+        container_service.recreate(&svc.to_spec())?;
     }
 
-    let code_dir = code_mount()?;
-    let ssh_dir = ssh_mount()?;
-    let dev_volumes = vec![code_dir.clone(), ssh_dir.clone()];
+    let code_mount_str = code_mount()?;
+    let ssh_mount_str = ssh_mount()?;
+    let mut dev_volumes = vec![code_mount_str, ssh_mount_str];
+    let mut dev_env = vec![];
+
+    if let Ok(auth_sock) = std::env::var("SSH_AUTH_SOCK") {
+        let auth_path = PathBuf::from(&auth_sock);
+        dev_volumes.push(format!(
+            "{}:{}",
+            auth_path.to_string_lossy(),
+            CONTAINER_SSH_SOCK_PATH
+        ));
+        dev_env.push(format!("SSH_AUTH_SOCK={}", CONTAINER_SSH_SOCK_PATH));
+        println!(
+            "🔑 SSH Agent (`{}`) detectado e configurado para o Hub.",
+            auth_sock
+        );
+    }
+
+    dev_volumes.extend(get_persistent_volumes());
+
+    let main_container_name = app_config
+        .container
+        .name
+        .context("Main container name not set in config")?;
+    let main_container_workdir = app_config
+        .container
+        .workdir
+        .context("Main container workdir not set in config")?;
 
     let dev_spec = devobox::domain::ContainerSpec {
-        name: "devobox",
-        image: "devobox-img",
+        name: &main_container_name,
+        image: &image_name,
         ports: &[],
-        env: &[],
+        env: &dev_env,
         network: Some("host"),
         userns: Some("keep-id"),
         security_opt: Some("label=disable"),
-        workdir: Some("/home/dev"),
+        workdir: Some(
+            main_container_workdir
+                .to_str()
+                .context("Container workdir is not valid UTF-8")?,
+        ),
         volumes: &dev_volumes,
         extra_args: &["-it"],
+        healthcheck_command: None,
+        healthcheck_interval: None,
+        healthcheck_timeout: None,
+        healthcheck_retries: None,
     };
 
     container_service.recreate(&dev_spec)?;
     println!("✅ Build concluído! Tudo pronto.");
     Ok(())
+}
+
+fn get_persistent_volumes() -> Vec<String> {
+    vec![
+        format!("devobox_data_mise:{}", PERSISTENT_MISE_SHARE_PATH),
+        format!("devobox_data_mise_config:{}", PERSISTENT_MISE_CONFIG_PATH),
+        format!("devobox_data_cargo:{}", PERSISTENT_CARGO_PATH),
+        format!("devobox_data_nvim_share:{}", PERSISTENT_NVIM_SHARE_PATH),
+        format!("devobox_data_nvim_state:{}", PERSISTENT_NVIM_STATE_PATH),
+        format!("devobox_data_bash_history:{}", PERSISTENT_BASH_HISTORY_PATH),
+    ]
 }
 
 fn code_mount() -> Result<String> {

@@ -1,16 +1,21 @@
-use devobox::domain::{ContainerSpec, Database};
+use devobox::domain::{ContainerSpec, Service, ServiceKind};
 
 #[test]
-fn test_database_to_spec_conversion() {
-    let db = Database {
+fn test_service_to_spec_conversion() {
+    let svc = Service {
         name: "test_postgres".to_string(),
         image: "postgres:15".to_string(),
+        kind: ServiceKind::Database,
         ports: vec!["5432:5432".to_string()],
         env: vec!["POSTGRES_PASSWORD=secret".to_string()],
         volumes: vec!["/data:/var/lib/postgresql".to_string()],
+        healthcheck_command: None,
+        healthcheck_interval: None,
+        healthcheck_timeout: None,
+        healthcheck_retries: None,
     };
 
-    let spec = db.to_spec();
+    let spec = svc.to_spec();
 
     assert_eq!(spec.name, "test_postgres");
     assert_eq!(spec.image, "postgres:15");
@@ -32,6 +37,10 @@ fn test_container_spec_creation() {
         workdir: Some("/app"),
         volumes: &[],
         extra_args: &["--rm"],
+        healthcheck_command: None,
+        healthcheck_interval: None,
+        healthcheck_timeout: None,
+        healthcheck_retries: None,
     };
 
     assert_eq!(spec.name, "test-container");
