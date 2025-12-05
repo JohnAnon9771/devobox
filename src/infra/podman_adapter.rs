@@ -153,7 +153,8 @@ impl ContainerRuntime for PodmanAdapter {
             cmd.args(["-w", dir.to_string_lossy().as_ref()]);
         }
 
-        cmd.arg(container).arg("bash");
+        cmd.arg(container)
+            .args(["zellij", "attach", "--create", "devobox"]);
 
         let status = cmd
             .status()
