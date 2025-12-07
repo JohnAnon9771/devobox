@@ -3,6 +3,7 @@ use devobox::infra::PodmanAdapter;
 use devobox::infra::config::{load_app_config, load_mise_config};
 use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 
 const CONTAINER_SSH_SOCK_PATH: &str = "/run/host-services/ssh-auth.sock";
@@ -94,6 +95,14 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
         );
     }
 
+    if let Ok(Some(gpg_mount)) = get_gpg_mount() {
+        dev_volumes.push(gpg_mount);
+    }
+
+    let (gui_volumes, gui_envs, gui_args) = get_gui_support();
+    dev_volumes.extend(gui_volumes);
+    dev_env.extend(gui_envs);
+
     dev_volumes.extend(get_persistent_volumes());
 
     let main_container_name = app_config
@@ -104,6 +113,12 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
         .container
         .workdir
         .context("Main container workdir not set in config")?;
+
+    let mut extra_args_storage = Vec::new();
+    extra_args_storage.push("-it".to_string());
+    extra_args_storage.extend(gui_args);
+
+    let extra_args_refs: Vec<&str> = extra_args_storage.iter().map(|s| s.as_str()).collect();
 
     let dev_spec = devobox::domain::ContainerSpec {
         name: &main_container_name,
@@ -119,7 +134,7 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
                 .context("Container workdir is not valid UTF-8")?,
         ),
         volumes: &dev_volumes,
-        extra_args: &["-it"],
+        extra_args: &extra_args_refs,
         healthcheck_command: None,
         healthcheck_interval: None,
         healthcheck_timeout: None,
@@ -129,6 +144,127 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     container_service.recreate(&dev_spec)?;
     println!("✅ Build concluído! Tudo pronto.");
     Ok(())
+}
+
+fn get_gpg_mount() -> Result<Option<String>> {
+    // Check if gpgconf is available
+    if Command::new("which")
+        .arg("gpgconf")
+        .output()
+        .map(|o| !o.status.success())
+        .unwrap_or(true)
+    {
+        return Ok(None);
+    }
+
+    let output = Command::new("gpgconf")
+        .args(["--list-dirs", "agent-socket"])
+        .output()?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let socket_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if socket_path.is_empty() {
+        return Ok(None);
+    }
+
+    let path = PathBuf::from(&socket_path);
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    println!("🔐 GPG Agent detectado: {}", socket_path);
+    // Mount to standard location in container: /home/dev/.gnupg/S.gpg-agent
+    Ok(Some(format!(
+        "{}:/home/dev/.gnupg/S.gpg-agent",
+        socket_path
+    )))
+}
+
+fn get_gui_support() -> (Vec<String>, Vec<String>, Vec<String>) {
+    let mut volumes = Vec::new();
+    let mut envs = Vec::new();
+    let mut devices = Vec::new();
+
+    // Wayland
+    if let Ok(wayland_display) = std::env::var("WAYLAND_DISPLAY") {
+        if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR") {
+            let host_socket = Path::new(&xdg_runtime).join(&wayland_display);
+            if host_socket.exists() {
+                println!("🖼️  Wayland detectado: {}", wayland_display);
+                let container_socket = format!("/run/user/1000/{}", wayland_display);
+                volumes.push(format!(
+                    "{}:{}",
+                    host_socket.to_string_lossy(),
+                    container_socket
+                ));
+                envs.push(format!("WAYLAND_DISPLAY={}", wayland_display));
+                envs.push("XDG_RUNTIME_DIR=/run/user/1000".to_string());
+            }
+        }
+    }
+
+    // X11
+    if let Ok(display) = std::env::var("DISPLAY") {
+        let x11_socket_dir = Path::new("/tmp/.X11-unix");
+        if x11_socket_dir.exists() {
+            println!("🖼️  X11 detectado: {}", display);
+            volumes.push(format!("{}:/tmp/.X11-unix:ro", x11_socket_dir.to_string_lossy()));
+            envs.push(format!("DISPLAY={}", display));
+        }
+    }
+
+    // GPU / DRI
+    if Path::new("/dev/dri").exists() {
+        println!("🎮 GPU aceleração detectada (/dev/dri)");
+        devices.push("--device".to_string());
+        devices.push("/dev/dri".to_string());
+    }
+
+    // Fonts
+    let font_dirs = vec![
+        "/usr/share/fonts",
+        "/usr/local/share/fonts",
+        "/Library/Fonts",
+        "/System/Library/Fonts",
+    ];
+
+    for (i, dir) in font_dirs.iter().enumerate() {
+        let p = Path::new(dir);
+        if p.exists() {
+            volumes.push(format!(
+                "{}:/home/dev/.local/share/fonts/host_{}:ro",
+                p.to_string_lossy(),
+                i
+            ));
+        }
+    }
+
+    // User fonts
+    let home = std::env::var("HOME").unwrap_or_default();
+    if !home.is_empty() {
+        let user_fonts_linux = Path::new(&home).join(".local/share/fonts");
+        if user_fonts_linux.exists() {
+            volumes.push(format!(
+                "{}:/home/dev/.local/share/fonts/host_user:ro",
+                user_fonts_linux.to_string_lossy()
+            ));
+        }
+
+        if cfg!(target_os = "macos") {
+            let user_fonts_mac = Path::new(&home).join("Library/Fonts");
+            if user_fonts_mac.exists() {
+                volumes.push(format!(
+                    "{}:/home/dev/.local/share/fonts/host_user_mac:ro",
+                    user_fonts_mac.to_string_lossy()
+                ));
+            }
+        }
+    }
+
+    (volumes, envs, devices)
 }
 
 fn get_persistent_volumes() -> Vec<String> {
