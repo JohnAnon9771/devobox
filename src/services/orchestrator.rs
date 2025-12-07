@@ -63,7 +63,6 @@ impl Orchestrator {
         for name in container_names {
             match self.container_service.stop(name) {
                 Ok(_) => debug!("Container {} parado com sucesso", name),
-
                 Err(e) => error!("  Falha ao parar {}: {}", name, e),
             }
         }
@@ -84,7 +83,6 @@ impl Orchestrator {
         for svc in services {
             match self.container_service.start(&svc.name) {
                 Ok(_) => debug!("Serviço {} iniciado", svc.name),
-
                 Err(e) => error!("  Falha ao iniciar {}: {}", svc.name, e),
             }
         }
@@ -96,23 +94,18 @@ impl Orchestrator {
                 info!("ﱮ Aguardando {} ficar saudável...", svc.name);
 
                 let mut retries = svc.healthcheck_retries.unwrap_or(3);
-
                 let interval_str = svc.healthcheck_interval.as_deref().unwrap_or("1s");
-
                 let interval = parse_duration(interval_str).unwrap_or(Duration::from_secs(1));
 
                 loop {
                     match self.container_service.get_health_status(&svc.name) {
                         Ok(ContainerHealthStatus::Healthy) => {
                             info!(" {} está saudável!", svc.name);
-
                             break;
                         }
-
                         Ok(ContainerHealthStatus::Starting) => {
                             debug!("{} ainda iniciando...", svc.name);
                         }
-
                         Ok(ContainerHealthStatus::Unhealthy) => {
                             warn!(" {} reportou unhealthy.", svc.name);
 
@@ -125,7 +118,6 @@ impl Orchestrator {
 
                             retries -= 1;
                         }
-
                         Ok(ContainerHealthStatus::NotApplicable) => {
                             warn!(
                                 " {} não tem healthcheck aplicável. Prosseguindo.",
@@ -134,7 +126,6 @@ impl Orchestrator {
 
                             break;
                         }
-
                         Err(e) => {
                             error!(" Erro ao verificar healthcheck de {}: {}", svc.name, e);
 
@@ -147,7 +138,6 @@ impl Orchestrator {
 
                             retries -= 1;
                         }
-
                         _ => {
                             debug!("Status desconhecido para {}", svc.name);
                         }
@@ -177,7 +167,6 @@ impl Orchestrator {
 
             match self.system_service.prune_containers() {
                 Ok(_) => debug!("Containers removidos"),
-
                 Err(e) => warn!("Falha ao remover containers: {}", e),
             }
         }
@@ -187,7 +176,6 @@ impl Orchestrator {
 
             match self.system_service.prune_images() {
                 Ok(_) => debug!("Imagens removidas"),
-
                 Err(e) => warn!("Falha ao remover imagens: {}", e),
             }
         }
@@ -197,7 +185,6 @@ impl Orchestrator {
 
             match self.system_service.prune_volumes() {
                 Ok(_) => debug!("Volumes removidos"),
-
                 Err(e) => warn!("Falha ao remover volumes: {}", e),
             }
         }
@@ -207,7 +194,6 @@ impl Orchestrator {
 
             match self.system_service.prune_build_cache() {
                 Ok(_) => debug!("Cache limpo"),
-
                 Err(e) => warn!("Falha ao limpar cache: {}", e),
             }
         }
