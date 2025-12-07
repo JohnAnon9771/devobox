@@ -227,8 +227,6 @@ fn get_gui_support() -> (Vec<String>, Vec<String>, Vec<String>) {
     let font_dirs = vec![
         "/usr/share/fonts",
         "/usr/local/share/fonts",
-        "/Library/Fonts",
-        "/System/Library/Fonts",
     ];
 
     for (i, dir) in font_dirs.iter().enumerate() {
@@ -251,16 +249,6 @@ fn get_gui_support() -> (Vec<String>, Vec<String>, Vec<String>) {
                 "{}:/home/dev/.local/share/fonts/host_user:ro",
                 user_fonts_linux.to_string_lossy()
             ));
-        }
-
-        if cfg!(target_os = "macos") {
-            let user_fonts_mac = Path::new(&home).join("Library/Fonts");
-            if user_fonts_mac.exists() {
-                volumes.push(format!(
-                    "{}:/home/dev/.local/share/fonts/host_user_mac:ro",
-                    user_fonts_mac.to_string_lossy()
-                ));
-            }
         }
     }
 

@@ -1856,7 +1856,7 @@ pub fn resolve_all_services(
 
 1. **Performance**: Binário compiled, startup rápido
 2. **Type Safety**: Previne bugs em compile-time
-3. **Cross-platform**: Compila para Linux, macOS, Windows
+3. **Plataforma**: Foco exclusivo em Linux
 4. **Ecosystem**: Clap, serde, anyhow são excelentes
 5. **Binary Distribution**: Single binary, fácil instalar
 
@@ -1881,7 +1881,7 @@ pub fn resolve_all_services(
 2. **Estado Compartilhado**: Todos os projetos compartilham env do Hub
 3. **Sem Hot Reload de Config**: Mudanças em config requerem rebuild
 4. **Podman-Only**: Não funciona com Docker (por enquanto)
-5. **Linux/macOS Only**: Windows requer WSL2
+5. **Linux Only**: Projetado para rodar nativamente no Linux
 
 ### Possíveis Melhorias Futuras
 
