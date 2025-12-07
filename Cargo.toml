@@ -19,6 +19,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 toml = "0.8"
 self_update = { version = "0.41", features = ["archive-tar", "compression-flate2"] }
+tracing = "0.1.43"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 
 [profile.release]
 lto = true
