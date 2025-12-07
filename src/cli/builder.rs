@@ -5,6 +5,7 @@ use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemSe
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
+use tracing::{info, warn};
 
 // --- Constants ---
 const CONTAINER_SSH_SOCK_PATH: &str = "/run/host-services/ssh-auth.sock";
@@ -44,7 +45,6 @@ struct BuildContext {
 
 /// Trait defining a pluggable host feature
 trait HostFeature {
-    fn name(&self) -> &'static str;
     fn configure(&self, context: &BuildContext) -> Result<Option<ContainerConfigFragment>>;
 }
 
@@ -52,10 +52,6 @@ trait HostFeature {
 
 struct SshFeature;
 impl HostFeature for SshFeature {
-    fn name(&self) -> &'static str {
-        "SSH Agent"
-    }
-
     fn configure(&self, _ctx: &BuildContext) -> Result<Option<ContainerConfigFragment>> {
         let mut config = ContainerConfigFragment::default();
 
@@ -64,10 +60,12 @@ impl HostFeature for SshFeature {
         let ssh_dir = Path::new(&home).join(".ssh");
 
         if !ssh_dir.exists() {
-            println!("⚠️  Diretório ~/.ssh não encontrado. Git via SSH não funcionará.");
-            println!("💡 Dica: Configure suas chaves SSH no host primeiro.");
+            warn!("  Diretório ~/.ssh não encontrado. Git via SSH não funcionará.");
+            info!(" Dica: Configure suas chaves SSH no host primeiro.");
         }
-        config.volumes.push(format!("{}:/home/dev/.ssh:ro", ssh_dir.to_string_lossy()));
+        config
+            .volumes
+            .push(format!("{}:/home/dev/.ssh:ro", ssh_dir.to_string_lossy()));
 
         // 2. SSH Agent (Socket)
         if let Ok(auth_sock) = std::env::var("SSH_AUTH_SOCK") {
@@ -77,9 +75,11 @@ impl HostFeature for SshFeature {
                 auth_path.to_string_lossy(),
                 CONTAINER_SSH_SOCK_PATH
             ));
-            config.env.push(format!("SSH_AUTH_SOCK={}", CONTAINER_SSH_SOCK_PATH));
-            println!(
-                "🔑 SSH Agent (`{}`) detectado e configurado para o Hub.",
+            config
+                .env
+                .push(format!("SSH_AUTH_SOCK={}", CONTAINER_SSH_SOCK_PATH));
+            info!(
+                " SSH Agent (`{}`) detectado e configurado para o Hub.",
                 auth_sock
             );
         }
@@ -90,10 +90,6 @@ impl HostFeature for SshFeature {
 
 struct GpgFeature;
 impl HostFeature for GpgFeature {
-    fn name(&self) -> &'static str {
-        "GPG Agent"
-    }
-
     fn configure(&self, _ctx: &BuildContext) -> Result<Option<ContainerConfigFragment>> {
         // Quick check if gpgconf exists to avoid process overhead
         if Command::new("which")
@@ -123,8 +119,8 @@ impl HostFeature for GpgFeature {
             return Ok(None);
         }
 
-        println!("🔐 GPG Agent detectado: {}", socket_path);
-        
+        info!(" GPG Agent detectado: {}", socket_path);
+
         Ok(Some(ContainerConfigFragment {
             volumes: vec![format!("{}:/home/dev/.gnupg/S.gpg-agent", socket_path)],
             ..Default::default()
@@ -134,10 +130,6 @@ impl HostFeature for GpgFeature {
 
 struct GuiFeature;
 impl HostFeature for GuiFeature {
-    fn name(&self) -> &'static str {
-        "GUI Support"
-    }
-
     fn configure(&self, _ctx: &BuildContext) -> Result<Option<ContainerConfigFragment>> {
         let mut config = ContainerConfigFragment::default();
 
@@ -146,40 +138,44 @@ impl HostFeature for GuiFeature {
             if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR") {
                 let host_socket = Path::new(&xdg_runtime).join(&wayland_display);
                 if host_socket.exists() {
-                    println!("🖼️  Wayland detectado: {}", wayland_display);
+                    info!("  Wayland detectado: {}", wayland_display);
                     config.volumes.push(format!(
                         "{}:/run/user/1000/{}",
                         host_socket.to_string_lossy(),
                         wayland_display
                     ));
-                    config.env.push(format!("WAYLAND_DISPLAY={}", wayland_display));
-                    config.env.push("XDG_RUNTIME_DIR=/run/user/1000".to_string());
+                    config
+                        .env
+                        .push(format!("WAYLAND_DISPLAY={}", wayland_display));
+                    config
+                        .env
+                        .push("XDG_RUNTIME_DIR=/run/user/1000".to_string());
                 }
             }
         }
 
         // X11
-        if let Ok(display) = std::env::var("DISPLAY") {
+        if let Ok(x11_display) = std::env::var("DISPLAY") {
             let x11_socket_dir = Path::new("/tmp/.X11-unix");
             if x11_socket_dir.exists() {
-                println!("🖼️  X11 detectado: {}", display);
-                config.volumes.push(format!("{}:/tmp/.X11-unix:ro", x11_socket_dir.to_string_lossy()));
-                config.env.push(format!("DISPLAY={}", display));
+                info!("  X11 detectado: {}", x11_display);
+                config.volumes.push(format!(
+                    "{}:/tmp/.X11-unix:ro",
+                    x11_socket_dir.to_string_lossy()
+                ));
+                config.env.push(format!("DISPLAY={}", x11_display));
             }
         }
 
         // GPU / DRI
         if Path::new("/dev/dri").exists() {
-            println!("🎮 GPU aceleração detectada (/dev/dri)");
+            info!(" GPU aceleração detectada (/dev/dri)");
             config.devices.push("--device".to_string());
             config.devices.push("/dev/dri".to_string());
         }
 
         // Fonts
-        let font_dirs = vec![
-            "/usr/share/fonts",
-            "/usr/local/share/fonts",
-        ];
+        let font_dirs = ["/usr/share/fonts", "/usr/local/share/fonts"];
 
         for (i, dir) in font_dirs.iter().enumerate() {
             let p = Path::new(dir);
@@ -210,10 +206,6 @@ impl HostFeature for GuiFeature {
 
 struct PersistenceFeature;
 impl HostFeature for PersistenceFeature {
-    fn name(&self) -> &'static str {
-        "Persistence"
-    }
-
     fn configure(&self, _ctx: &BuildContext) -> Result<Option<ContainerConfigFragment>> {
         let volumes = vec![
             format!("devobox_data_mise:{}", PERSISTENT_MISE_SHARE_PATH),
@@ -223,7 +215,7 @@ impl HostFeature for PersistenceFeature {
             format!("devobox_data_nvim_state:{}", PERSISTENT_NVIM_STATE_PATH),
             format!("devobox_data_bash_history:{}", PERSISTENT_BASH_HISTORY_PATH),
         ];
-        
+
         Ok(Some(ContainerConfigFragment {
             volumes,
             ..Default::default()
@@ -233,12 +225,8 @@ impl HostFeature for PersistenceFeature {
 
 struct CodeMountFeature;
 impl HostFeature for CodeMountFeature {
-    fn name(&self) -> &'static str {
-        "Code Mount"
-    }
-
     fn configure(&self, _ctx: &BuildContext) -> Result<Option<ContainerConfigFragment>> {
-         let code_dir = std::env::var("DEVOBOX_CODE_DIR")
+        let code_dir = std::env::var("DEVOBOX_CODE_DIR")
             .ok()
             .map(PathBuf::from)
             .unwrap_or_else(|| {
@@ -248,10 +236,10 @@ impl HostFeature for CodeMountFeature {
 
         let code_dir = shellexpand::tilde(code_dir.to_string_lossy().as_ref()).into_owned();
         let path = PathBuf::from(&code_dir);
-        
+
         if !path.exists() {
-            println!(
-                "⚠️  Diretório {:?} não existe. Criando para o bind mount...",
+            warn!(
+                "  Diretório {:?} não existe. Criando para o bind mount...",
                 path
             );
             std::fs::create_dir_all(&path).with_context(|| format!("criando {:?}", path))?;
@@ -267,12 +255,12 @@ impl HostFeature for CodeMountFeature {
 // --- Main Build Logic ---
 
 pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
-    let app_config = load_app_config(config_dir)?; 
+    let app_config = load_app_config(config_dir)?;
 
     let runtime = Arc::new(PodmanAdapter::new());
     let container_service = Arc::new(ContainerService::new(runtime.clone()));
     let system_service = Arc::new(SystemService::new(runtime));
-    
+
     // 1. Validation & Setup
     let containerfile_path_from_config = app_config
         .paths
@@ -307,12 +295,12 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
         .image_name
         .clone()
         .context("Image name not set in config")?;
-    
-    println!("🏗️  Construindo imagem {} (Arch)...", image_name);
+
+    info!("  Construindo imagem {} (Arch)...", image_name);
     system_service.build_image(&image_name, &containerfile, &context)?;
 
     // 4. Validate Configs
-    println!("🔍 Validando mise.toml...");
+    info!(" Validando mise.toml...");
     let mise_toml_path = config_dir.join(
         app_config
             .paths
@@ -323,11 +311,11 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     load_mise_config(&mise_toml_path)?;
 
     // 5. Resolve Services
-    println!("🗄️  Resolvendo serviços (incluindo dependências)...");
+    info!(" Resolvendo serviços (incluindo dependências)...");
     let services = devobox::infra::config::resolve_all_services(config_dir, &app_config)?;
 
     if services.is_empty() {
-        println!("⚠️  Nenhum serviço configurado. Pulei criação de serviços.");
+        warn!("  Nenhum serviço configurado. Pulei criação de serviços.");
     }
 
     for svc in &services {
@@ -345,7 +333,7 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
 
     let build_ctx = BuildContext {};
     let mut final_config = ContainerConfigFragment::default();
-    
+
     // Using iterator for performance and cleaner aggregation
     for feature in features {
         if let Ok(Some(fragment)) = feature.configure(&build_ctx) {
@@ -393,7 +381,7 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     };
 
     container_service.recreate(&dev_spec)?;
-    println!("✅ Build concluído! Tudo pronto.");
+    info!(" Build concluído! Tudo pronto.");
     Ok(())
 }
 
@@ -407,7 +395,8 @@ mod tests {
         // but we can verify the logic structure if we extracted the path generation logic.
         // For now, we test the Feature impl roughly by instantiation.
         let feature = SshFeature;
-        assert_eq!(feature.name(), "SSH Agent");
+        // Just ensure it implements the trait
+        let _ = feature.configure(&BuildContext {});
     }
 
     #[test]
@@ -430,5 +419,46 @@ mod tests {
         assert_eq!(merged.env, vec!["e1", "e2"]);
         assert_eq!(merged.devices, vec!["d1"]);
         assert_eq!(merged.extra_args, vec!["a1"]);
+    }
+
+    #[test]
+    fn test_persistence_feature_config() {
+        let feature = PersistenceFeature;
+
+        let ctx = BuildContext {};
+        let config = feature.configure(&ctx).unwrap().unwrap();
+
+        // Check if critical volumes are present
+        assert!(
+            config
+                .volumes
+                .iter()
+                .any(|v| v.contains("devobox_data_mise"))
+        );
+        assert!(
+            config
+                .volumes
+                .iter()
+                .any(|v| v.contains("devobox_data_cargo"))
+        );
+        assert!(
+            config
+                .volumes
+                .iter()
+                .any(|v| v.contains("devobox_data_bash_history"))
+        );
+
+        // Ensure no env vars or devices are set by default for persistence
+        assert!(config.env.is_empty());
+        assert!(config.devices.is_empty());
+    }
+
+    #[test]
+    fn test_container_config_fragment_default() {
+        let config = ContainerConfigFragment::default();
+        assert!(config.volumes.is_empty());
+        assert!(config.env.is_empty());
+        assert!(config.devices.is_empty());
+        assert!(config.extra_args.is_empty());
     }
 }

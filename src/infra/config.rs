@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use toml;
+use tracing::{info, warn};
 
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -125,7 +126,7 @@ pub fn resolve_all_services(start_dir: &Path, start_config: &AppConfig) -> Resul
     if let Some(services_yml_name) = &start_config.paths.services_yml {
         let local_services_path = start_dir.join(services_yml_name);
         if local_services_path.exists() {
-            println!("  ➕ Carregando serviços de {:?}...", local_services_path);
+            info!("   Carregando serviços de {:?}...", local_services_path);
             let services = load_services(&local_services_path)?;
             all_services.extend(services);
         }
@@ -138,8 +139,8 @@ pub fn resolve_all_services(start_dir: &Path, start_config: &AppConfig) -> Resul
             let canonical_path = match fs::canonicalize(&project_path) {
                 Ok(p) => p,
                 Err(_) => {
-                    println!(
-                        "⚠️  Caminho de dependência inválido ou não encontrado: {:?}",
+                    warn!(
+                        "  Caminho de dependência inválido ou não encontrado: {:?}",
                         project_path
                     );
                     continue;
@@ -155,8 +156,8 @@ pub fn resolve_all_services(start_dir: &Path, start_config: &AppConfig) -> Resul
             let dep_config = match load_app_config(&canonical_path) {
                 Ok(cfg) => cfg,
                 Err(e) => {
-                    println!(
-                        "⚠️  Erro ao carregar config de dependência em {:?}: {}",
+                    warn!(
+                        "  Erro ao carregar config de dependência em {:?}: {}",
                         canonical_path, e
                     );
                     continue;
@@ -171,11 +172,11 @@ pub fn resolve_all_services(start_dir: &Path, start_config: &AppConfig) -> Resul
             );
 
             if dep_services_path.exists() {
-                println!("  ➕ Carregando dependência de {:?}...", dep_services_path);
+                info!("   Carregando dependência de {:?}...", dep_services_path);
                 match load_services(&dep_services_path) {
                     Ok(mut services) => all_services.append(&mut services),
-                    Err(e) => println!(
-                        "⚠️  Erro ao ler serviços de dependência {:?}: {}",
+                    Err(e) => warn!(
+                        "  Erro ao ler serviços de dependência {:?}: {}",
                         dep_services_path, e
                     ),
                 }

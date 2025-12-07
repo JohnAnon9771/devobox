@@ -3,6 +3,7 @@ use crate::domain::{ContainerRuntime, ContainerSpec, ContainerState};
 use anyhow::{Result, bail};
 use std::path::Path;
 use std::sync::Arc;
+use tracing::{info, warn};
 
 pub struct ContainerService {
     runtime: Arc<dyn ContainerRuntime>,
@@ -23,7 +24,7 @@ impl ContainerService {
         match container.state {
             ContainerState::Running => Ok(()),
             ContainerState::Stopped => {
-                println!("🔌 Iniciando {name}...");
+                info!(" Iniciando {name}...");
                 self.runtime.start_container(name)
             }
             ContainerState::NotCreated => {
@@ -37,15 +38,15 @@ impl ContainerService {
 
         match container.state {
             ContainerState::Running => {
-                println!("⚠️  {name} já está rodando");
+                warn!("  {name} já está rodando");
                 Ok(())
             }
             ContainerState::Stopped => {
-                println!("🔌 Iniciando {name}...");
+                info!(" Iniciando {name}...");
                 self.runtime.start_container(name)
             }
             ContainerState::NotCreated => {
-                println!("⚠️  Container {name} não existe. Rode 'devobox builder build' primeiro.");
+                warn!("  Container {name} não existe. Rode 'devobox builder build' primeiro.");
                 Ok(())
             }
         }
@@ -56,11 +57,11 @@ impl ContainerService {
 
         match container.state {
             ContainerState::Running => {
-                println!("💤 Parando {name}...");
+                info!(" Parando {name}...");
                 self.runtime.stop_container(name)
             }
             ContainerState::Stopped | ContainerState::NotCreated => {
-                println!("⚠️  {name} já está parado ou não foi criado");
+                warn!("  {name} já está parado ou não foi criado");
                 Ok(())
             }
         }

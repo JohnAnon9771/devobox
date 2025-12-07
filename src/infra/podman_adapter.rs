@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use std::ffi::OsStr;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
+use tracing::{debug, info, warn};
 
 pub struct PodmanAdapter;
 
@@ -139,7 +140,7 @@ impl ContainerRuntime for PodmanAdapter {
         );
 
         if status.is_err() {
-            println!("⚠️  Não foi possível remover {name} (pode não existir)");
+            warn!("  Não foi possível remover {name} (pode não existir)");
         }
 
         Ok(())
@@ -217,7 +218,7 @@ impl ContainerRuntime for PodmanAdapter {
     }
 
     fn nuke_system(&self) -> Result<()> {
-        println!("🧹 Executando limpeza agressiva (Nuke)...");
+        info!(" Executando limpeza agressiva (Nuke)...");
         podman(
             ["system", "prune", "-a", "--volumes", "-f"],
             "removendo tudo (imagens, containers, volumes)",
@@ -228,7 +229,7 @@ impl ContainerRuntime for PodmanAdapter {
             "limpando cache de build",
             false,
         )?;
-        println!("✨ Limpeza agressiva concluída!");
+        info!(" Limpeza agressiva concluída!");
 
         Ok(())
     }
@@ -285,7 +286,14 @@ where
     S: AsRef<OsStr>,
 {
     let mut cmd = Command::new("podman");
-    cmd.args(args.into_iter().map(|item| item.as_ref().to_os_string()));
+    let args_vec: Vec<std::ffi::OsString> = args
+        .into_iter()
+        .map(|item| item.as_ref().to_os_string())
+        .collect();
+
+    debug!("Executando podman {:?}", args_vec);
+
+    cmd.args(&args_vec);
 
     if quiet {
         cmd.stdout(Stdio::null());

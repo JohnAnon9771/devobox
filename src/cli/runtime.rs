@@ -5,6 +5,7 @@ use devobox::infra::config::{AppConfig, load_app_config};
 use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tracing::{info, warn};
 
 struct Runtime {
     global_config_dir: PathBuf,
@@ -47,8 +48,8 @@ impl Runtime {
 
     fn start_services_by_filter(&self, kind_filter: Option<ServiceKind>) -> Result<()> {
         if self.services.is_empty() {
-            println!(
-                "⚠️  Nenhum serviço configurado em {:?}",
+            warn!(
+                "  Nenhum serviço configurado em {:?}",
                 self.global_config_dir
             );
             return Ok(());
@@ -131,7 +132,7 @@ impl Runtime {
     }
 
     fn status(&self) -> Result<()> {
-        println!("📦 Status dos containers:");
+        println!(" Status dos containers:");
         let mut missing = false;
 
         for name in self.all_containers() {
@@ -149,7 +150,7 @@ impl Runtime {
         }
 
         if missing {
-            println!("⚠️  Há containers ausentes. Rode 'devobox builder build'.");
+            warn!("  Há containers ausentes. Rode 'devobox builder build'.");
         }
 
         Ok(())
@@ -170,8 +171,8 @@ impl Runtime {
             .context("Main container name not set in config")?;
         let workdir_in_container = container_workdir()?; // This returns a path *inside* the container
 
-        println!(
-            "🚀 Entrando no {} (workdir {:?})",
+        info!(
+            " Entrando no {} (workdir {:?})",
             main_container_name, workdir_in_container
         );
         let result = self
@@ -218,7 +219,7 @@ impl Runtime {
         let status = self.container_service.get_status(&svc.name)?;
 
         if status.state == ContainerState::NotCreated {
-            println!("🆕 Criando container para {}...", svc.name);
+            info!(" Criando container para {}...", svc.name);
             self.container_service.recreate(&svc.to_spec())?;
         }
 
@@ -228,8 +229,8 @@ impl Runtime {
 
 pub fn shell(config_dir: &Path, with_dbs: bool, auto_stop: bool) -> Result<()> {
     if !config_dir.exists() {
-        println!("⚠️  Ambiente não configurado.");
-        println!("🔧 Executando setup inicial automaticamente...\n");
+        warn!("  Ambiente não configurado.");
+        info!(" Executando setup inicial automaticamente...\n");
 
         crate::cli::setup::install(config_dir)?;
     }
@@ -244,13 +245,13 @@ pub fn shell(config_dir: &Path, with_dbs: bool, auto_stop: bool) -> Result<()> {
         .context("Main container name not set in config")?;
     let devobox_status = runtime.container_service.get_status(main_container_name)?;
     if devobox_status.state == ContainerState::NotCreated {
-        println!("⚠️  Container '{}' não encontrado.", main_container_name);
-        println!("🔧 Construindo ambiente...\n");
+        warn!("  Container '{}' não encontrado.", main_container_name);
+        info!(" Construindo ambiente...\n");
 
         crate::cli::builder::build(config_dir, false)?;
     }
 
-    println!("\n✅ Ambiente pronto! Abrindo shell...\n");
+    info!("\n Ambiente pronto! Abrindo shell...\n");
 
     runtime.run_shell(with_dbs, auto_stop)
 }
@@ -274,7 +275,7 @@ pub fn down(config_dir: &Path) -> Result<()> {
     for name in runtime.all_containers() {
         runtime.container_service.stop(&name)?;
     }
-    println!("✅ Tudo parado");
+    info!(" Tudo parado");
     Ok(())
 }
 

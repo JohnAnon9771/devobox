@@ -5,6 +5,7 @@ use anyhow::Result;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use tracing::{debug, error, info, warn};
 
 /// Orchestrates complex workflows involving multiple containers and system operations
 pub struct Orchestrator {
@@ -57,17 +58,18 @@ impl Orchestrator {
             return Ok(());
         }
 
-        println!("🧹 Encerrando todos os containers...");
+        info!(" Encerrando todos os containers...");
 
         for name in container_names {
-            print!("  💤 Parando {name}...");
             match self.container_service.stop(name) {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
+                Ok(_) => debug!("Container {} parado com sucesso", name),
+
+                Err(e) => error!("  Falha ao parar {}: {}", name, e),
             }
         }
 
-        println!("✅ Containers encerrados");
+        info!(" Containers encerrados");
+
         Ok(())
     }
 
@@ -77,117 +79,141 @@ impl Orchestrator {
             return Ok(());
         }
 
-        println!("🚀 Iniciando todos os serviços...");
+        info!(" Iniciando todos os serviços...");
 
         for svc in services {
-            print!("  🔌 Iniciando {}...", svc.name);
             match self.container_service.start(&svc.name) {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
+                Ok(_) => debug!("Serviço {} iniciado", svc.name),
+
+                Err(e) => error!("  Falha ao iniciar {}: {}", svc.name, e),
             }
         }
 
-        println!("💖 Verificando healthchecks...");
+        info!(" Verificando healthchecks...");
 
         for svc in services {
             if svc.healthcheck_command.is_some() {
-                print!("  🩺 Aguardando {} ficar saudável...", svc.name);
+                info!("ﱮ Aguardando {} ficar saudável...", svc.name);
+
                 let mut retries = svc.healthcheck_retries.unwrap_or(3);
+
                 let interval_str = svc.healthcheck_interval.as_deref().unwrap_or("1s");
+
                 let interval = parse_duration(interval_str).unwrap_or(Duration::from_secs(1));
 
                 loop {
                     match self.container_service.get_health_status(&svc.name) {
                         Ok(ContainerHealthStatus::Healthy) => {
-                            println!(" ✅ Saudável!");
+                            info!(" {} está saudável!", svc.name);
+
                             break;
                         }
+
                         Ok(ContainerHealthStatus::Starting) => {
-                            // Still starting, wait
-                            print!(".");
+                            debug!("{} ainda iniciando...", svc.name);
                         }
+
                         Ok(ContainerHealthStatus::Unhealthy) => {
-                            println!(" ❌ Não saudável.");
+                            warn!(" {} reportou unhealthy.", svc.name);
+
                             if retries == 0 {
                                 anyhow::bail!(
                                     "Serviço '{}' falhou no healthcheck após várias tentativas.",
                                     svc.name
                                 );
                             }
+
                             retries -= 1;
-                            print!(".");
                         }
+
                         Ok(ContainerHealthStatus::NotApplicable) => {
-                            println!(" ⚠️ Sem healthcheck configurado. Prosseguindo.");
+                            warn!(
+                                " {} não tem healthcheck aplicável. Prosseguindo.",
+                                svc.name
+                            );
+
                             break;
                         }
+
                         Err(e) => {
-                            println!(" ❌ Erro ao verificar healthcheck: {}", e);
+                            error!(" Erro ao verificar healthcheck de {}: {}", svc.name, e);
+
                             if retries == 0 {
                                 anyhow::bail!(
                                     "Erro persistente ao verificar healthcheck do serviço '{}'.",
                                     svc.name
                                 );
                             }
+
                             retries -= 1;
-                            print!(".");
                         }
+
                         _ => {
-                            // Unknown status, possibly not running yet, just wait.
-                            print!(".");
+                            debug!("Status desconhecido para {}", svc.name);
                         }
                     }
+
                     thread::sleep(interval);
                 }
             } else {
-                println!(
-                    "  ⚠️ Serviço '{}' sem healthcheck configurado. Prosseguindo.",
+                info!(
+                    " Serviço '{}' sem healthcheck configurado. Prosseguindo.",
                     svc.name
                 );
             }
         }
 
-        println!("✅ Todos os serviços iniciados e saudáveis (ou sem healthcheck).");
+        info!(" Todos os serviços iniciados e saudáveis (ou sem healthcheck).");
+
         Ok(())
     }
 
     /// Cleans up Podman resources based on options, continuing even if individual operations fail
     pub fn cleanup(&self, options: &CleanupOptions) -> Result<()> {
-        println!("🧹 Limpando recursos do Podman...");
+        info!(" Limpando recursos do Podman...");
 
         if options.containers {
-            print!("  ⏳ Removendo containers parados...");
+            info!(" Removendo containers parados...");
+
             match self.system_service.prune_containers() {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
+                Ok(_) => debug!("Containers removidos"),
+
+                Err(e) => warn!("Falha ao remover containers: {}", e),
             }
         }
 
         if options.images {
-            print!("  ⏳ Removendo imagens não utilizadas...");
+            info!(" Removendo imagens não utilizadas...");
+
             match self.system_service.prune_images() {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
+                Ok(_) => debug!("Imagens removidas"),
+
+                Err(e) => warn!("Falha ao remover imagens: {}", e),
             }
         }
 
         if options.volumes {
-            print!("  ⏳ Removendo volumes órfãos...");
+            info!(" Removendo volumes órfãos...");
+
             match self.system_service.prune_volumes() {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
+                Ok(_) => debug!("Volumes removidos"),
+
+                Err(e) => warn!("Falha ao remover volumes: {}", e),
             }
         }
 
         if options.build_cache {
-            print!("  ⏳ Limpando cache de build...");
+            info!(" Limpando cache de build...");
+
             match self.system_service.prune_build_cache() {
-                Ok(_) => println!(" ✓"),
-                Err(e) => println!(" ⚠️  Falha: {}", e),
+                Ok(_) => debug!("Cache limpo"),
+
+                Err(e) => warn!("Falha ao limpar cache: {}", e),
             }
         }
 
-        println!("✨ Limpeza concluída!");
+        info!(" Limpeza concluída!");
+
         Ok(())
     }
 

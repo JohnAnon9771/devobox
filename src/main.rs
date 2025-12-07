@@ -3,6 +3,8 @@ mod cli;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use devobox::services::CleanupOptions;
+use tracing::info;
+use tracing_subscriber::{EnvFilter, fmt};
 
 #[derive(Parser)]
 #[command(
@@ -21,6 +23,10 @@ struct Cli {
     /// Parar todos os containers ao sair do shell (apenas quando nenhum subcomando é fornecido)
     #[arg(long)]
     auto_stop: bool,
+
+    /// Habilita logs detalhados (debug level)
+    #[arg(long, short = 'v', global = true)]
+    verbose: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -158,25 +164,40 @@ enum DbAction {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    // Initialize tracing
+    let default_level = if cli.verbose { "debug" } else { "info" };
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
+
+    fmt()
+        .with_env_filter(env_filter)
+        .with_target(false) // Hide module path for cleaner CLI output by default
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_file(false)
+        .with_line_number(false)
+        .with_level(false) // Cleaner output, relies on color for level
+        .init();
+
     match cli.command {
         None => {
             // Default behavior: open shell
             cli::runtime::shell(&cli.config_dir, cli.with_dbs, cli.auto_stop)
         }
         Some(Commands::Init { skip_cleanup }) => {
-            println!("📦 Passo 1/2: Instalando configurações...");
+            info!(" Passo 1/2: Instalando configurações...");
             cli::setup::install(&cli.config_dir)?;
 
-            println!("\n📦 Passo 2/2: Construindo ambiente...");
+            info!("\n Passo 2/2: Construindo ambiente...");
             cli::builder::build(&cli.config_dir, skip_cleanup)?;
 
-            println!("\n✅ Setup completo! Use 'devobox' para abrir o shell.");
+            info!("\n Setup completo! Use 'devobox' para abrir o shell.");
             Ok(())
         }
         Some(Commands::Install) => {
             cli::setup::install(&cli.config_dir)?;
-            println!("\n✅ Configurações instaladas em {:?}", cli.config_dir);
-            println!("💡 Dica: Edite os arquivos e depois rode 'devobox build'");
+            info!("\n Configurações instaladas em {:?}", cli.config_dir);
+            info!(" Dica: Edite os arquivos e depois rode 'devobox build'");
             Ok(())
         }
         Some(Commands::Build { skip_cleanup } | Commands::Rebuild { skip_cleanup }) => {
