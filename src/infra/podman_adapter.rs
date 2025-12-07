@@ -1,8 +1,10 @@
+use crate::domain::traits::ContainerHealthStatus;
 use crate::domain::{Container, ContainerRuntime, ContainerSpec, ContainerState};
 use anyhow::{Context, Result, bail};
 use std::ffi::OsStr;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
+use tracing::{debug, info, warn};
 
 pub struct PodmanAdapter;
 
@@ -22,6 +24,39 @@ impl ContainerRuntime for PodmanAdapter {
     fn get_container(&self, name: &str) -> Result<Container> {
         let state = get_container_state(name)?;
         Ok(Container::new(name.to_string(), state))
+    }
+
+    fn get_container_health(&self, name: &str) -> Result<ContainerHealthStatus> {
+        let output = Command::new("podman")
+            .args(["inspect", name, "--format", "{{.State.Health.Status}}"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .with_context(|| format!("checando health de {name}"))?;
+
+        if !output.status.success() {
+            // If inspect fails (e.g., container not found), treat as Unknown
+            return Ok(ContainerHealthStatus::Unknown);
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        match stdout.as_str() {
+            "healthy" => Ok(ContainerHealthStatus::Healthy),
+            "unhealthy" => Ok(ContainerHealthStatus::Unhealthy),
+            "starting" => Ok(ContainerHealthStatus::Starting),
+            "" => {
+                // Check if container exists and running. If it exists but has no healthcheck, it's NotApplicable
+                let state = get_container_state(name)?;
+                match state {
+                    ContainerState::Running | ContainerState::Stopped => {
+                        Ok(ContainerHealthStatus::NotApplicable)
+                    }
+                    _ => Ok(ContainerHealthStatus::Unknown), // Container not created, etc.
+                }
+            }
+            _ => Ok(ContainerHealthStatus::Unknown),
+        }
     }
 
     fn start_container(&self, name: &str) -> Result<()> {
@@ -71,6 +106,23 @@ impl ContainerRuntime for PodmanAdapter {
             args.push(volume.clone());
         }
 
+        if let Some(hc_cmd) = spec.healthcheck_command {
+            args.push("--healthcheck-cmd".into());
+            args.push(hc_cmd.into());
+        }
+        if let Some(hc_interval) = spec.healthcheck_interval {
+            args.push("--healthcheck-interval".into());
+            args.push(hc_interval.into());
+        }
+        if let Some(hc_timeout) = spec.healthcheck_timeout {
+            args.push("--healthcheck-timeout".into());
+            args.push(hc_timeout.into());
+        }
+        if let Some(hc_retries) = spec.healthcheck_retries {
+            args.push("--healthcheck-retries".into());
+            args.push(hc_retries.to_string());
+        }
+
         for extra in spec.extra_args {
             args.push((*extra).into());
         }
@@ -88,7 +140,7 @@ impl ContainerRuntime for PodmanAdapter {
         );
 
         if status.is_err() {
-            println!("⚠️  Não foi possível remover {name} (pode não existir)");
+            warn!("  Não foi possível remover {name} (pode não existir)");
         }
 
         Ok(())
@@ -102,7 +154,8 @@ impl ContainerRuntime for PodmanAdapter {
             cmd.args(["-w", dir.to_string_lossy().as_ref()]);
         }
 
-        cmd.arg(container).arg("bash");
+        cmd.arg(container)
+            .args(["zellij", "attach", "--create", "devobox"]);
 
         let status = cmd
             .status()
@@ -165,7 +218,7 @@ impl ContainerRuntime for PodmanAdapter {
     }
 
     fn nuke_system(&self) -> Result<()> {
-        println!("🧹 Executando limpeza agressiva (Nuke)...");
+        info!(" Executando limpeza agressiva (Nuke)...");
         podman(
             ["system", "prune", "-a", "--volumes", "-f"],
             "removendo tudo (imagens, containers, volumes)",
@@ -176,7 +229,7 @@ impl ContainerRuntime for PodmanAdapter {
             "limpando cache de build",
             false,
         )?;
-        println!("✨ Limpeza agressiva concluída!");
+        info!(" Limpeza agressiva concluída!");
 
         Ok(())
     }
@@ -233,7 +286,14 @@ where
     S: AsRef<OsStr>,
 {
     let mut cmd = Command::new("podman");
-    cmd.args(args.into_iter().map(|item| item.as_ref().to_os_string()));
+    let args_vec: Vec<std::ffi::OsString> = args
+        .into_iter()
+        .map(|item| item.as_ref().to_os_string())
+        .collect();
+
+    debug!("Executando podman {:?}", args_vec);
+
+    cmd.args(&args_vec);
 
     if quiet {
         cmd.stdout(Stdio::null());

@@ -2,10 +2,22 @@ use super::{Container, ContainerSpec};
 use anyhow::Result;
 use std::path::Path;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ContainerHealthStatus {
+    Healthy,
+    Unhealthy,
+    Starting,
+    Unknown,
+    NotApplicable, // No healthcheck configured
+}
+
 /// Trait for container runtime operations
 pub trait ContainerRuntime: Send + Sync {
     /// Get the current state of a container
     fn get_container(&self, name: &str) -> Result<Container>;
+
+    /// Get the health status of a container
+    fn get_container_health(&self, name: &str) -> Result<ContainerHealthStatus>;
 
     /// Start a container
     fn start_container(&self, name: &str) -> Result<()>;

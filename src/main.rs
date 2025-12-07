@@ -3,6 +3,8 @@ mod cli;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use devobox::services::CleanupOptions;
+use tracing::info;
+use tracing_subscriber::{EnvFilter, fmt};
 
 #[derive(Parser)]
 #[command(
@@ -21,6 +23,10 @@ struct Cli {
     /// Parar todos os containers ao sair do shell (apenas quando nenhum subcomando é fornecido)
     #[arg(long)]
     auto_stop: bool,
+
+    /// Habilita logs detalhados (debug level)
+    #[arg(long, short = 'v', global = true)]
+    verbose: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -65,12 +71,24 @@ enum Commands {
     },
     /// Sobe devobox e todos os bancos configurados
     #[command(alias = "start")]
-    Up,
+    Up {
+        /// Iniciar apenas bancos de dados
+        #[arg(long)]
+        dbs_only: bool,
+        /// Iniciar apenas serviços genéricos (não bancos)
+        #[arg(long)]
+        services_only: bool,
+    },
     /// Para todos os containers
     #[command(alias = "stop")]
     Down,
     /// Mostra status de todos os containers
     Status,
+    /// Controle de serviços genéricos
+    Service {
+        #[command(subcommand)]
+        action: ServiceAction,
+    },
     /// Controle de bancos de dados
     Db {
         #[command(subcommand)]
@@ -102,6 +120,27 @@ enum Commands {
 }
 
 #[derive(Subcommand)]
+enum ServiceAction {
+    /// Inicia serviço(s)
+    Start {
+        /// Nome do serviço específico (opcional)
+        service: Option<String>,
+    },
+    /// Para serviço(s)
+    Stop {
+        /// Nome do serviço específico (opcional)
+        service: Option<String>,
+    },
+    /// Reinicia serviço(s)
+    Restart {
+        /// Nome do serviço específico (opcional)
+        service: Option<String>,
+    },
+    /// Mostra status dos serviços
+    Status,
+}
+
+#[derive(Subcommand)]
 enum DbAction {
     /// Inicia banco(s) de dados
     Start {
@@ -125,25 +164,40 @@ enum DbAction {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    // Initialize tracing
+    let default_level = if cli.verbose { "debug" } else { "info" };
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
+
+    fmt()
+        .with_env_filter(env_filter)
+        .with_target(false) // Hide module path for cleaner CLI output by default
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_file(false)
+        .with_line_number(false)
+        .with_level(false) // Cleaner output, relies on color for level
+        .init();
+
     match cli.command {
         None => {
             // Default behavior: open shell
             cli::runtime::shell(&cli.config_dir, cli.with_dbs, cli.auto_stop)
         }
         Some(Commands::Init { skip_cleanup }) => {
-            println!("📦 Passo 1/2: Instalando configurações...");
-            cli::agent::install(&cli.config_dir)?;
+            info!(" Passo 1/2: Instalando configurações...");
+            cli::setup::install(&cli.config_dir)?;
 
-            println!("\n📦 Passo 2/2: Construindo ambiente...");
+            info!("\n Passo 2/2: Construindo ambiente...");
             cli::builder::build(&cli.config_dir, skip_cleanup)?;
 
-            println!("\n✅ Setup completo! Use 'devobox' para abrir o shell.");
+            info!("\n Setup completo! Use 'devobox' para abrir o shell.");
             Ok(())
         }
         Some(Commands::Install) => {
-            cli::agent::install(&cli.config_dir)?;
-            println!("\n✅ Configurações instaladas em {:?}", cli.config_dir);
-            println!("💡 Dica: Edite os arquivos e depois rode 'devobox build'");
+            cli::setup::install(&cli.config_dir)?;
+            info!("\n Configurações instaladas em {:?}", cli.config_dir);
+            info!(" Dica: Edite os arquivos e depois rode 'devobox build'");
             Ok(())
         }
         Some(Commands::Build { skip_cleanup } | Commands::Rebuild { skip_cleanup }) => {
@@ -154,9 +208,24 @@ fn main() -> Result<()> {
             auto_stop,
         }) => cli::runtime::shell(&cli.config_dir, with_dbs, auto_stop),
         Some(Commands::Dev { auto_stop }) => cli::runtime::shell(&cli.config_dir, true, auto_stop),
-        Some(Commands::Up) => cli::runtime::up(&cli.config_dir),
+        Some(Commands::Up {
+            dbs_only,
+            services_only,
+        }) => cli::runtime::up(&cli.config_dir, dbs_only, services_only),
         Some(Commands::Down) => cli::runtime::down(&cli.config_dir),
         Some(Commands::Status) => cli::runtime::status(&cli.config_dir),
+        Some(Commands::Service { action }) => match action {
+            ServiceAction::Start { service } => {
+                cli::runtime::svc_start(&cli.config_dir, service.as_deref())
+            }
+            ServiceAction::Stop { service } => {
+                cli::runtime::svc_stop(&cli.config_dir, service.as_deref())
+            }
+            ServiceAction::Restart { service } => {
+                cli::runtime::svc_restart(&cli.config_dir, service.as_deref())
+            }
+            ServiceAction::Status => cli::runtime::status(&cli.config_dir),
+        },
         Some(Commands::Db { action }) => match action {
             DbAction::Start { service } => {
                 cli::runtime::db_start(&cli.config_dir, service.as_deref())

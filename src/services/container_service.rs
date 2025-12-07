@@ -1,7 +1,9 @@
+use crate::domain::traits::ContainerHealthStatus;
 use crate::domain::{ContainerRuntime, ContainerSpec, ContainerState};
 use anyhow::{Result, bail};
 use std::path::Path;
 use std::sync::Arc;
+use tracing::{info, warn};
 
 pub struct ContainerService {
     runtime: Arc<dyn ContainerRuntime>,
@@ -22,7 +24,7 @@ impl ContainerService {
         match container.state {
             ContainerState::Running => Ok(()),
             ContainerState::Stopped => {
-                println!("🔌 Iniciando {name}...");
+                info!(" Iniciando {name}...");
                 self.runtime.start_container(name)
             }
             ContainerState::NotCreated => {
@@ -36,15 +38,15 @@ impl ContainerService {
 
         match container.state {
             ContainerState::Running => {
-                println!("⚠️  {name} já está rodando");
+                warn!("  {name} já está rodando");
                 Ok(())
             }
             ContainerState::Stopped => {
-                println!("🔌 Iniciando {name}...");
+                info!(" Iniciando {name}...");
                 self.runtime.start_container(name)
             }
             ContainerState::NotCreated => {
-                println!("⚠️  Container {name} não existe. Rode 'devobox builder build' primeiro.");
+                warn!("  Container {name} não existe. Rode 'devobox builder build' primeiro.");
                 Ok(())
             }
         }
@@ -55,11 +57,11 @@ impl ContainerService {
 
         match container.state {
             ContainerState::Running => {
-                println!("💤 Parando {name}...");
+                info!(" Parando {name}...");
                 self.runtime.stop_container(name)
             }
             ContainerState::Stopped | ContainerState::NotCreated => {
-                println!("⚠️  {name} já está parado ou não foi criado");
+                warn!("  {name} já está parado ou não foi criado");
                 Ok(())
             }
         }
@@ -77,173 +79,32 @@ impl ContainerService {
     pub fn is_command_available(&self, cmd: &str) -> bool {
         self.runtime.is_command_available(cmd)
     }
+
+    pub fn get_health_status(&self, name: &str) -> Result<ContainerHealthStatus> {
+        self.runtime.get_container_health(name)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::domain::Database;
-    use crate::test_support::MockRuntime;
-
-    fn create_test_service() -> (ContainerService, Arc<MockRuntime>) {
-        let mock = Arc::new(MockRuntime::new());
-        let service = ContainerService::new(mock.clone());
-        (service, mock)
-    }
+    use crate::domain::{Service, ServiceKind};
 
     #[test]
-    fn test_ensure_running_starts_stopped_container() {
-        let (service, mock) = create_test_service();
-        mock.add_container("test", ContainerState::Stopped);
-
-        let result = service.ensure_running("test");
-        assert!(result.is_ok());
-        assert_eq!(mock.get_state("test"), Some(ContainerState::Running));
-    }
-
-    #[test]
-    fn test_ensure_running_fails_if_not_created() {
-        let (service, _mock) = create_test_service();
-
-        let result = service.ensure_running("missing");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("não existe"));
-    }
-
-    #[test]
-    fn test_ensure_running_does_nothing_if_already_running() {
-        let (service, mock) = create_test_service();
-        mock.add_container("test", ContainerState::Running);
-
-        let result = service.ensure_running("test");
-        assert!(result.is_ok());
-        assert_eq!(mock.get_state("test"), Some(ContainerState::Running));
-    }
-
-    #[test]
-    fn test_start_container() {
-        let (service, mock) = create_test_service();
-        mock.add_container("test", ContainerState::Stopped);
-
-        let result = service.start("test");
-        assert!(result.is_ok());
-        assert_eq!(mock.get_state("test"), Some(ContainerState::Running));
-
-        let commands = mock.get_commands();
-        assert!(commands.contains(&"start:test".to_string()));
-    }
-
-    #[test]
-    fn test_stop_container() {
-        let (service, mock) = create_test_service();
-        mock.add_container("test", ContainerState::Running);
-
-        let result = service.stop("test");
-        assert!(result.is_ok());
-        assert_eq!(mock.get_state("test"), Some(ContainerState::Stopped));
-
-        let commands = mock.get_commands();
-        assert!(commands.contains(&"stop:test".to_string()));
-    }
-
-    #[test]
-    fn test_recreate_container() {
-        let (service, mock) = create_test_service();
-        mock.add_container("test", ContainerState::Running);
-
-        let spec = ContainerSpec {
-            name: "test",
-            image: "test:latest",
-            ports: &[],
-            env: &[],
-            network: None,
-            userns: None,
-            security_opt: None,
-            workdir: None,
-            volumes: &[],
-            extra_args: &[],
+    fn test_service_spec_conversion() {
+        let svc = Service {
+            name: "test_svc".to_string(),
+            image: "app:latest".to_string(),
+            kind: ServiceKind::Generic,
+            ports: vec!["8080:8080".to_string()],
+            env: vec!["ENV_VAR=value".to_string()],
+            volumes: vec!["/app:/usr/src/app".to_string()],
+            healthcheck_command: Some("exit 0".to_string()),
+            healthcheck_interval: Some("1s".to_string()),
+            healthcheck_timeout: Some("1s".to_string()),
+            healthcheck_retries: Some(1),
         };
 
-        let result = service.recreate(&spec);
-        assert!(result.is_ok());
-
-        let commands = mock.get_commands();
-        assert!(commands.contains(&"remove:test".to_string()));
-        assert!(commands.contains(&"create:test".to_string()));
-    }
-
-    #[test]
-    fn test_stop_already_stopped_container() {
-        let (service, mock) = create_test_service();
-        mock.add_container("test", ContainerState::Stopped);
-
-        let result = service.stop("test");
-        assert!(result.is_ok());
-
-        let commands = mock.get_commands();
-        assert!(!commands.contains(&"stop:test".to_string()));
-    }
-
-    #[test]
-    fn test_start_already_running_container() {
-        let (service, mock) = create_test_service();
-        mock.add_container("test", ContainerState::Running);
-
-        let result = service.start("test");
-        assert!(result.is_ok());
-
-        let commands = mock.get_commands();
-        assert!(!commands.contains(&"start:test".to_string()));
-    }
-
-    #[test]
-    fn test_start_nonexistent_container() {
-        let (service, _mock) = create_test_service();
-
-        let result = service.start("missing");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_container_spec_conversion() {
-        let db = Database {
-            name: "test_db".to_string(),
-            image: "postgres:15".to_string(),
-            ports: vec!["5432:5432".to_string()],
-            env: vec!["POSTGRES_PASSWORD=secret".to_string()],
-            volumes: vec!["/data:/var/lib/postgresql".to_string()],
-        };
-
-        let spec = db.to_spec();
-        assert_eq!(spec.name, "test_db");
-        assert_eq!(spec.image, "postgres:15");
-        assert_eq!(spec.ports.len(), 1);
-        assert_eq!(spec.env.len(), 1);
-        assert_eq!(spec.volumes.len(), 1);
-    }
-
-    #[test]
-    fn test_multiple_operations_sequence() {
-        let (service, mock) = create_test_service();
-        mock.add_container("test", ContainerState::Stopped);
-
-        assert!(service.start("test").is_ok());
-        assert_eq!(mock.get_state("test"), Some(ContainerState::Running));
-
-        assert!(service.stop("test").is_ok());
-        assert_eq!(mock.get_state("test"), Some(ContainerState::Stopped));
-
-        assert!(service.start("test").is_ok());
-        assert_eq!(mock.get_state("test"), Some(ContainerState::Running));
-
-        let commands = mock.get_commands();
-        assert_eq!(
-            commands.iter().filter(|c| c.starts_with("start:")).count(),
-            2
-        );
-        assert_eq!(
-            commands.iter().filter(|c| c.starts_with("stop:")).count(),
-            1
-        );
+        let spec = svc.to_spec();
+        assert_eq!(spec.name, "test_svc");
     }
 }

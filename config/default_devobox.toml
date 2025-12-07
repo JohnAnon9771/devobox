@@ -1,0 +1,14 @@
+# Default configuration for Devobox
+
+[paths]
+containerfile = "Containerfile"
+databases_yml = "databases.yml"
+mise_toml = "mise.toml"
+starship_toml = "starship.toml"
+
+[build]
+image_name = "devobox-img"
+
+[container]
+name = "devobox"
+workdir = "/home/dev"
