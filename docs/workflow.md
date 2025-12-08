@@ -84,6 +84,145 @@ Quando voltar amanhã e rodar `devobox`, tudo estará lá.
 
 ---
 
+## 📁 Trabalhando com Múltiplos Projetos (Novo em v0.5.0+)
+
+O Devobox agora suporta **sessões Zellij dedicadas por projeto**, permitindo que você trabalhe em múltiplos projetos simultaneamente sem misturar contextos.
+
+### O Conceito
+
+Cada projeto em `~/code` pode ter sua própria:
+- Sessão Zellij isolada
+- Conjunto de serviços (databases, caches, etc.)
+- Variáveis de ambiente específicas
+
+### Fluxo de Trabalho
+
+#### 1. Descobrir Projetos Disponíveis
+```bash
+# Dentro do devobox
+devobox project list
+```
+
+Mostra todos os projetos em `~/code` que têm um arquivo `devobox.toml`.
+
+#### 2. Ativar um Projeto
+```bash
+# Dentro do devobox
+devobox project up meu-frontend
+```
+
+Isso vai:
+1. ✅ Iniciar os serviços específicos do projeto
+2. ✅ Carregar as variáveis de ambiente configuradas
+3. ✅ Criar/anexar uma sessão Zellij dedicada (`devobox-meu-frontend`)
+4. ✅ Mudar para o diretório do projeto
+
+#### 3. Trabalhar no Projeto
+Agora você está dentro de uma **sessão Zellij isolada** para esse projeto:
+- Abra seu editor: `nvim .`
+- Rode o servidor: `npm start`
+- Execute testes: `cargo test`
+
+**Tudo fica dentro da sessão do projeto!**
+
+#### 4. Trocar de Projeto
+Quer trabalhar em outro projeto? Simples:
+
+1. Saia da sessão Zellij atual: `Ctrl + o`, depois `d`
+2. Você volta ao shell principal do devobox
+3. Ative outro projeto: `devobox project up meu-backend`
+
+Agora você tem **duas sessões Zellij rodando em paralelo**:
+- `devobox-meu-frontend` (com seu servidor Next.js rodando)
+- `devobox-meu-backend` (com sua API Rails rodando)
+
+#### 5. Ver Contexto Atual
+```bash
+devobox project info
+```
+
+Mostra:
+- Em qual contexto você está (Host ou Container)
+- Qual projeto está ativo
+- Sessões Zellij em execução
+
+### Estrutura de um Projeto
+
+```bash
+~/code/meu-projeto/
+├── devobox.toml           # Configuração do projeto
+├── services.yml           # Serviços específicos (opcional)
+└── src/                   # Código do projeto
+```
+
+**Exemplo de `devobox.toml`:**
+```toml
+[project]
+env = ["NODE_ENV=development", "API_URL=http://localhost:3001"]
+
+[dependencies]
+services_yml = "services.yml"
+```
+
+**Exemplo de `services.yml`:**
+```yaml
+services:
+  - name: app-db
+    type: database
+    image: postgres:16
+    ports: ["5433:5432"]
+    env:
+      - POSTGRES_PASSWORD=dev
+      - POSTGRES_DB=myapp
+```
+
+### Exemplo Prático: Frontend + Backend
+
+**Projeto Frontend (`~/code/frontend/devobox.toml`):**
+```toml
+[project]
+env = ["NEXT_PUBLIC_API_URL=http://localhost:3001"]
+
+[dependencies]
+services_yml = "services.yml"
+```
+
+**Projeto Backend (`~/code/backend/devobox.toml`):**
+```toml
+[project]
+env = ["RAILS_ENV=development", "DATABASE_URL=postgresql://localhost/myapp"]
+
+[dependencies]
+services_yml = "services.yml"
+```
+
+**Fluxo de trabalho:**
+```bash
+# Dentro do devobox
+devobox project up backend
+# Agora você está no backend, com Postgres rodando
+# rails server
+
+# Detach: Ctrl+o, d
+devobox project up frontend
+# Agora você está no frontend, com Next.js
+# npm run dev
+
+# Quer voltar ao backend?
+# Ctrl+o, d (sai do frontend)
+devobox project up backend
+# Volta à sessão do backend (servidor Rails ainda rodando!)
+```
+
+### Vantagens
+
+✅ **Isolamento**: Cada projeto tem sua sessão Zellij separada
+✅ **Persistência**: Servidores continuam rodando quando você troca de projeto
+✅ **Organização**: Não precisa lembrar em qual aba está cada projeto
+✅ **Eficiência**: Serviços compartilhados (ex: Redis) não duplicam
+
+---
+
 ## 💡 Dicas Avançadas
 
 ### Sincronização com Clipboard

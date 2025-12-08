@@ -1,4 +1,4 @@
-use crate::domain::Service;
+use crate::domain::{Project, Service};
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -334,6 +334,78 @@ pub fn load_app_config(config_dir: &Path) -> Result<AppConfig> {
     }
 
     Ok(app_config)
+}
+
+/// Resolves services for a specific project
+///
+/// Loads the project's own services.yml and any services from project dependencies.
+/// This function is used when activating a project workspace to determine which
+/// services need to be started.
+///
+/// # Arguments
+/// * `project` - The project to resolve services for
+/// * `_config_dir` - The global config directory (currently unused but kept for future use)
+///
+/// # Returns
+/// * `Ok(Vec<Service>)` - List of all services for the project
+/// * `Err` - If there was an error loading services
+pub fn resolve_project_services(project: &Project, _config_dir: &Path) -> Result<Vec<Service>> {
+    let mut all_services = Vec::new();
+    let mut visited_paths = HashSet::new();
+
+    // Mark project path as visited
+    visited_paths.insert(fs::canonicalize(&project.path).unwrap_or_else(|_| project.path.clone()));
+
+    // 1. Load project's own services if configured
+    if let Some(services_yml_path) = project.services_yml_path() {
+        if services_yml_path.exists() {
+            info!("  Carregando serviços de {:?}...", services_yml_path);
+            let services = load_services(&services_yml_path)?;
+            all_services.extend(services);
+        } else {
+            warn!(
+                "  Arquivo de serviços configurado mas não encontrado: {:?}",
+                services_yml_path
+            );
+        }
+    }
+
+    // 2. Load services from project dependencies
+    for relative_path in &project.config.dependencies.include_projects {
+        let dep_path = project.path.join(relative_path);
+        let canonical_path = match fs::canonicalize(&dep_path) {
+            Ok(p) => p,
+            Err(_) => {
+                warn!(
+                    "  Caminho de dependência inválido ou não encontrado: {:?}",
+                    dep_path
+                );
+                continue;
+            }
+        };
+
+        if !visited_paths.insert(canonical_path.clone()) {
+            continue; // Already visited
+        }
+
+        // Try to load services.yml from dependency
+        let dep_services_path = canonical_path.join("services.yml");
+        if dep_services_path.exists() {
+            info!(
+                "  Carregando serviços de dependência: {:?}...",
+                dep_services_path
+            );
+            match load_services(&dep_services_path) {
+                Ok(mut services) => all_services.append(&mut services),
+                Err(e) => warn!(
+                    "  Erro ao ler serviços de dependência {:?}: {}",
+                    dep_services_path, e
+                ),
+            }
+        }
+    }
+
+    Ok(all_services)
 }
 
 #[cfg(test)]

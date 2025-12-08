@@ -120,6 +120,7 @@ Camada de lógica de negócio. Responsável por:
 - `orchestrator.rs` - Orquestração de serviços, healthchecks
 - `container_service.rs` - Operações de lifecycle de containers
 - `system_service.rs` - Operações de sistema (build, cleanup)
+- `zellij_service.rs` - Gerenciamento de sessões Zellij por projeto
 
 ### 2.3 Domain Layer (`src/domain/`)
 
@@ -134,6 +135,7 @@ Camada de modelo de domínio. Define:
 
 - `container.rs` - Entidades: Service, ServiceKind, ContainerSpec, ContainerState
 - `traits.rs` - Trait ContainerRuntime, ContainerHealthStatus
+- `project.rs` - Entidades: Project, ProjectConfig, ProjectSettings, ProjectDependencies
 
 ### 2.4 Infrastructure Layer (`src/infra/`)
 
@@ -148,6 +150,7 @@ Camada de infraestrutura. Responsável por:
 
 - `podman_adapter.rs` - Implementa ContainerRuntime via Podman CLI
 - `config.rs` - Loading, parsing e validação de configs
+- `project_discovery.rs` - Descoberta e carregamento de projetos em ~/code
 
 ---
 
@@ -278,6 +281,53 @@ pub struct ContainerSpec<'a> {
 ```
 
 **Referência**: `src/domain/container.rs:1-100`
+
+#### Project & ProjectConfig
+
+**Arquivo**: `src/domain/project.rs`
+
+```rust
+#[derive(Debug, Clone)]
+pub struct Project {
+    pub name: String,           // Nome do projeto (nome do diretório)
+    pub path: PathBuf,          // Caminho absoluto para o projeto
+    pub config: ProjectConfig,  // Configuração carregada
+}
+
+impl Project {
+    pub fn session_name(&self) -> String {
+        format!("devobox-{}", self.name)
+    }
+
+    pub fn services_yml_path(&self) -> Option<PathBuf> {
+        self.config
+            .dependencies
+            .services_yml
+            .as_ref()
+            .map(|p| self.path.join(p))
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ProjectConfig {
+    pub project: Option<ProjectSettings>,
+    pub dependencies: ProjectDependencies,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ProjectSettings {
+    pub env: Vec<String>,
+    pub shell: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ProjectDependencies {
+    pub services_yml: Option<String>,
+    pub include_projects: Vec<String>,
+}
+```
+
+**Referência**: `src/domain/project.rs:1-80`
 
 ### 3.2 Abstrações
 
@@ -1405,7 +1455,13 @@ RUNTIME:
 MANAGEMENT:
 ├── service {start|stop|restart|status} [NAME]
 ├── db {start|stop|restart|status} [NAME]
+├── project {list|up|info}
 └── cleanup [--containers|--images|--volumes|--build-cache|--nuke|--all]
+
+PROJECT (v0.5.0+):
+├── project list                List projetos disponíveis em ~/code
+├── project up <name>           Ativa workspace (container only)
+└── project info                Mostra contexto e projeto atual
 
 OPTIONS:
   --config-dir <PATH>           Override config directory
@@ -1716,19 +1772,23 @@ impl Runtime {
 
 ### Mapa de Arquivos
 
-| Arquivo                             | Linhas | Responsabilidade | Principais Funções                                          |
-| ----------------------------------- | ------ | ---------------- | ----------------------------------------------------------- |
-| `src/main.rs`                       | 150    | CLI entry point  | Command definitions (Clap)                                  |
-| `src/cli/runtime.rs`                | 350    | Runtime commands | shell(), up(), down(), status(), container_workdir()        |
-| `src/cli/builder.rs`                | 200    | Build system     | build(), code_mount(), ssh_mount()                          |
-| `src/cli/setup.rs`                  | 100    | Setup command    | install()                                                   |
-| `src/services/orchestrator.rs`      | 150    | Orchestration    | start_all(), stop_all(), cleanup()                          |
-| `src/services/container_service.rs` | 120    | Container ops    | ensure_running(), start(), stop(), recreate()               |
-| `src/services/system_service.rs`    | 80     | System ops       | build*image(), prune*\*()                                   |
-| `src/infra/podman_adapter.rs`       | 250    | Podman impl      | create_container(), get_container(), exec_shell()           |
-| `src/infra/config.rs`               | 400    | Configuration    | load_app_config(), resolve_all_services(), parse_services() |
-| `src/domain/container.rs`           | 100    | Domain entities  | Service, ServiceKind, ContainerSpec, ContainerState         |
-| `src/domain/traits.rs`              | 50     | Abstractions     | ContainerRuntime trait, ContainerHealthStatus               |
+| Arquivo                             | Linhas | Responsabilidade     | Principais Funções                                                |
+| ----------------------------------- | ------ | -------------------- | ----------------------------------------------------------------- |
+| `src/main.rs`                       | 305    | CLI entry point      | Command definitions (Clap)                                        |
+| `src/cli/runtime.rs`                | 500    | Runtime commands     | shell(), up(), down(), status(), project_up(), project_list()    |
+| `src/cli/builder.rs`                | 200    | Build system         | build(), code_mount(), ssh_mount()                                |
+| `src/cli/setup.rs`                  | 100    | Setup command        | install()                                                         |
+| `src/cli/context.rs`                | 50     | Context detection    | RuntimeContext::detect()                                          |
+| `src/services/orchestrator.rs`      | 150    | Orchestration        | start_all(), stop_all(), cleanup()                                |
+| `src/services/container_service.rs` | 120    | Container ops        | ensure_running(), start(), stop(), recreate()                     |
+| `src/services/system_service.rs`    | 80     | System ops           | build*image(), prune*\*()                                         |
+| `src/services/zellij_service.rs`    | 180    | Zellij management    | attach_or_create(), list_sessions(), kill_session()               |
+| `src/infra/podman_adapter.rs`       | 250    | Podman impl          | create_container(), get_container(), exec_shell()                 |
+| `src/infra/config.rs`               | 450    | Configuration        | load_app_config(), resolve_all_services(), resolve_project_services() |
+| `src/infra/project_discovery.rs`    | 150    | Project discovery    | discover_all(), find_project(), load_project_config()             |
+| `src/domain/container.rs`           | 100    | Domain entities      | Service, ServiceKind, ContainerSpec, ContainerState               |
+| `src/domain/project.rs`             | 80     | Project entities     | Project, ProjectConfig, ProjectSettings, ProjectDependencies      |
+| `src/domain/traits.rs`              | 50     | Abstractions         | ContainerRuntime trait, ContainerHealthStatus                     |
 
 ### Pontos de Entrada Principais
 

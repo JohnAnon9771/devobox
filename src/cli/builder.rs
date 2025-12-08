@@ -357,13 +357,17 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     // Combine feature devices into extra args since PodmanAdapter might expect raw args for some
     all_extra_args.extend(final_config.devices);
 
+    // Inject DEVOBOX_CONTAINER marker for context detection
+    let mut container_env = final_config.env.clone();
+    container_env.push("DEVOBOX_CONTAINER=1".to_string());
+
     let extra_args_refs: Vec<&str> = all_extra_args.iter().map(|s| s.as_str()).collect();
 
     let dev_spec = devobox::domain::ContainerSpec {
         name: &main_container_name,
         image: &image_name,
         ports: &[],
-        env: &final_config.env,
+        env: &container_env,
         network: Some("host"),
         userns: Some("keep-id"),
         security_opt: Some("label=disable"),
