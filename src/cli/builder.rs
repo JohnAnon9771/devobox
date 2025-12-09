@@ -232,23 +232,23 @@ impl HostFeature for GuiFeature {
         let mut config = ContainerConfigFragment::default();
 
         // Wayland
-        if let Ok(wayland_display) = std::env::var("WAYLAND_DISPLAY") {
-            if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR") {
-                let host_socket = Path::new(&xdg_runtime).join(&wayland_display);
-                if host_socket.exists() {
-                    info!("  Wayland detectado: {}", wayland_display);
-                    config.volumes.push(format!(
-                        "{}:/run/user/1000/{}",
-                        host_socket.to_string_lossy(),
-                        wayland_display
-                    ));
-                    config
-                        .env
-                        .push(format!("WAYLAND_DISPLAY={}", wayland_display));
-                    config
-                        .env
-                        .push("XDG_RUNTIME_DIR=/run/user/1000".to_string());
-                }
+        if let Ok(wayland_display) = std::env::var("WAYLAND_DISPLAY")
+            && let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR")
+        {
+            let host_socket = Path::new(&xdg_runtime).join(&wayland_display);
+            if host_socket.exists() {
+                info!("  Wayland detectado: {}", wayland_display);
+                config.volumes.push(format!(
+                    "{}:/run/user/1000/{}",
+                    host_socket.to_string_lossy(),
+                    wayland_display
+                ));
+                config
+                    .env
+                    .push(format!("WAYLAND_DISPLAY={}", wayland_display));
+                config
+                    .env
+                    .push("XDG_RUNTIME_DIR=/run/user/1000".to_string());
             }
         }
 
@@ -480,11 +480,8 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    // Mutex para serializar testes que modificam variáveis de ambiente,
-    // evitando "flaky tests" devido à natureza global de std::env.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-    // Helper para executar testes com variáveis de ambiente controladas
     fn with_env_vars<F>(vars: Vec<(&str, Option<&str>)>, test: F)
     where
         F: FnOnce(),

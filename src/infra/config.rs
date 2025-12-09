@@ -258,7 +258,7 @@ fn parse_services(content: &str, path: &Path) -> Result<Vec<Service>> {
     }
 
     let doc: ServiceDocument =
-        serde_yaml::from_str(content).with_context(|| format!("parse de {:?}", path))?;
+        serde_yml::from_str(content).with_context(|| format!("parse de {:?}", path))?;
 
     let services = match doc {
         ServiceDocument::Root { services } => services,

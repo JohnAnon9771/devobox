@@ -63,7 +63,7 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn to_spec(&self) -> ContainerSpec {
+    pub fn to_spec(&self) -> ContainerSpec<'_> {
         ContainerSpec {
             name: &self.name,
             image: &self.image,
