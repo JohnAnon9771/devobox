@@ -2,12 +2,12 @@ use anyhow::{Context, Result, bail};
 use devobox::infra::PodmanAdapter;
 use devobox::infra::config::{load_app_config, load_mise_config};
 use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
-// --- Constants ---
 const CONTAINER_SSH_SOCK_PATH: &str = "/run/host-services/ssh-auth.sock";
 const PERSISTENT_MISE_SHARE_PATH: &str = "/home/dev/.local/share/mise";
 const PERSISTENT_MISE_CONFIG_PATH: &str = "/home/dev/.config/mise";
@@ -16,7 +16,39 @@ const PERSISTENT_NVIM_SHARE_PATH: &str = "/home/dev/.local/share/nvim";
 const PERSISTENT_NVIM_STATE_PATH: &str = "/home/dev/.local/state/nvim";
 const PERSISTENT_BASH_HISTORY_PATH: &str = "/home/dev/.local/state/bash";
 
-// --- Types & Traits ---
+/// Detects Podman socket strictly following Linux standards
+/// Priority: Env Var -> XDG Rootless -> UID Rootless -> System Rootful
+fn detect_podman_socket() -> Option<PathBuf> {
+    if let Ok(sock) = std::env::var("PODMAN_SOCK") {
+        let path = PathBuf::from(sock);
+        if path.exists()
+            && std::fs::metadata(&path)
+                .map(|m| m.file_type().is_socket())
+                .unwrap_or(false)
+        {
+            return Some(path);
+        }
+    }
+
+    let uid = std::fs::metadata("/proc/self").map(|m| m.uid()).ok()?;
+
+    let candidates = vec![
+        std::env::var("XDG_RUNTIME_DIR")
+            .ok()
+            .map(|dir| PathBuf::from(dir).join("podman/podman.sock")),
+        Some(PathBuf::from(format!(
+            "/run/user/{}/podman/podman.sock",
+            uid
+        ))),
+        Some(PathBuf::from("/run/podman/podman.sock")),
+    ];
+
+    candidates.into_iter().flatten().find(|path| {
+        std::fs::metadata(path)
+            .map(|m| m.file_type().is_socket())
+            .unwrap_or(false)
+    })
+}
 
 /// Accumulated configuration fragment from a feature
 #[derive(Debug, Default, Clone)]
@@ -48,14 +80,11 @@ trait HostFeature {
     fn configure(&self, context: &BuildContext) -> Result<Option<ContainerConfigFragment>>;
 }
 
-// --- Features Implementation ---
-
 struct SshFeature;
 impl HostFeature for SshFeature {
     fn configure(&self, _ctx: &BuildContext) -> Result<Option<ContainerConfigFragment>> {
         let mut config = ContainerConfigFragment::default();
 
-        // 1. SSH Mount (Keys)
         let home = std::env::var("HOME").unwrap_or_else(|_| "/home/dev".into());
         let ssh_dir = Path::new(&home).join(".ssh");
 
@@ -67,21 +96,31 @@ impl HostFeature for SshFeature {
             .volumes
             .push(format!("{}:/home/dev/.ssh:ro", ssh_dir.to_string_lossy()));
 
-        // 2. SSH Agent (Socket)
         if let Ok(auth_sock) = std::env::var("SSH_AUTH_SOCK") {
             let auth_path = PathBuf::from(&auth_sock);
-            config.volumes.push(format!(
-                "{}:{}",
-                auth_path.to_string_lossy(),
-                CONTAINER_SSH_SOCK_PATH
-            ));
-            config
-                .env
-                .push(format!("SSH_AUTH_SOCK={}", CONTAINER_SSH_SOCK_PATH));
-            info!(
-                " SSH Agent (`{}`) detectado e configurado para o Hub.",
-                auth_sock
-            );
+            if auth_path.exists()
+                && std::fs::metadata(&auth_path)
+                    .map(|m| m.file_type().is_socket())
+                    .unwrap_or(false)
+            {
+                config.volumes.push(format!(
+                    "{}:{}",
+                    auth_path.to_string_lossy(),
+                    CONTAINER_SSH_SOCK_PATH
+                ));
+                config
+                    .env
+                    .push(format!("SSH_AUTH_SOCK={}", CONTAINER_SSH_SOCK_PATH));
+                info!(
+                    " SSH Agent (`{}`) detectado e configurado para o Hub.",
+                    auth_sock
+                );
+            } else {
+                warn!(
+                    "  SSH_AUTH_SOCK aponta para um caminho inexistente ou não-socket: {:?}",
+                    auth_path
+                );
+            }
         }
 
         Ok(Some(config))
@@ -115,14 +154,73 @@ impl HostFeature for GpgFeature {
         }
 
         let path = PathBuf::from(&socket_path);
-        if !path.exists() {
+        if path.exists()
+            && std::fs::metadata(&path)
+                .map(|m| m.file_type().is_socket())
+                .unwrap_or(false)
+        {
+            info!(" GPG Agent detectado: {}", socket_path);
+            Ok(Some(ContainerConfigFragment {
+                volumes: vec![format!("{}:/home/dev/.gnupg/S.gpg-agent", socket_path)],
+                ..Default::default()
+            }))
+        } else {
+            debug!(
+                "  GPG Agent detectado em {:?}, mas não é um socket ou não existe.",
+                path
+            );
+            Ok(None)
+        }
+    }
+}
+
+struct PodmanFeature;
+impl HostFeature for PodmanFeature {
+    fn configure(&self, _ctx: &BuildContext) -> Result<Option<ContainerConfigFragment>> {
+        // 1. Prevent "Inception" (Devobox inside Devobox)
+        if std::env::var("DEVOBOX_CONTAINER").is_ok() {
+            debug!("  Detectado ambiente containerizado: pulando montagem do socket Podman.");
             return Ok(None);
         }
 
-        info!(" GPG Agent detectado: {}", socket_path);
+        // 2. Detect Socket
+        let socket_path = match detect_podman_socket() {
+            Some(path) => path,
+            None => {
+                debug!("  Socket Podman não encontrado (Rootless ou Rootful).");
+                return Ok(None);
+            }
+        };
+
+        // 3. Check Permissions (Crucial for Linux)
+        // If we can't read the parent directory, we might not be able to mount the socket.
+        // `socket_path.parent()` can be None if it's a root path, handle that case.
+        if socket_path
+            .parent()
+            .is_none_or(|parent| std::fs::read_dir(parent).is_err())
+        {
+            warn!(
+                "  Socket Podman encontrado em {:?}, mas sem permissão de acesso ao diretório pai. Verifique as permissões.",
+                socket_path
+            );
+            return Ok(None);
+        }
+
+        info!(
+            "  Socket Podman detectado: {:?} (controle de containers do host habilitado)",
+            socket_path
+        );
+
+        // Standard path inside the container
+        let container_socket_path = "/run/podman/podman.sock";
 
         Ok(Some(ContainerConfigFragment {
-            volumes: vec![format!("{}:/home/dev/.gnupg/S.gpg-agent", socket_path)],
+            volumes: vec![format!(
+                "{}:{}",
+                socket_path.to_string_lossy(),
+                container_socket_path
+            )],
+            env: vec![format!("PODMAN_SOCK={}", container_socket_path)],
             ..Default::default()
         }))
     }
@@ -252,8 +350,6 @@ impl HostFeature for CodeMountFeature {
     }
 }
 
-// --- Main Build Logic ---
-
 pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     let app_config = load_app_config(config_dir)?;
 
@@ -261,7 +357,6 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     let container_service = Arc::new(ContainerService::new(runtime.clone()));
     let system_service = Arc::new(SystemService::new(runtime));
 
-    // 1. Validation & Setup
     let containerfile_path_from_config = app_config
         .paths
         .containerfile
@@ -276,7 +371,6 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
         );
     }
 
-    // 2. Cleanup
     if !skip_cleanup {
         let orchestrator = Orchestrator::new(container_service.clone(), system_service.clone());
         let cleanup_options = CleanupOptions {
@@ -288,7 +382,6 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
         let _ = orchestrator.cleanup(&cleanup_options);
     }
 
-    // 3. Build Image
     let context = config_dir.to_path_buf();
     let image_name = app_config
         .build
@@ -299,7 +392,6 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     info!("  Construindo imagem {} (Arch)...", image_name);
     system_service.build_image(&image_name, &containerfile, &context)?;
 
-    // 4. Validate Configs
     info!(" Validando mise.toml...");
     let mise_toml_path = config_dir.join(
         app_config
@@ -310,7 +402,6 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     );
     load_mise_config(&mise_toml_path)?;
 
-    // 5. Resolve Services
     info!(" Resolvendo serviços (incluindo dependências)...");
     let services = devobox::infra::config::resolve_all_services(config_dir, &app_config)?;
 
@@ -322,11 +413,11 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
         container_service.recreate(&svc.to_spec())?;
     }
 
-    // 6. Configure Host Features (SOLID / OCP)
     let features: Vec<Box<dyn HostFeature>> = vec![
         Box::new(CodeMountFeature),
         Box::new(SshFeature),
         Box::new(GpgFeature),
+        Box::new(PodmanFeature),
         Box::new(GuiFeature),
         Box::new(PersistenceFeature),
     ];
@@ -334,14 +425,12 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     let build_ctx = BuildContext {};
     let mut final_config = ContainerConfigFragment::default();
 
-    // Using iterator for performance and cleaner aggregation
     for feature in features {
         if let Ok(Some(fragment)) = feature.configure(&build_ctx) {
             final_config = final_config.merge(fragment);
         }
     }
 
-    // 7. Prepare Final Spec
     let main_container_name = app_config
         .container
         .name
@@ -351,13 +440,10 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
         .workdir
         .context("Main container workdir not set in config")?;
 
-    // Combine default args with feature args
     let mut all_extra_args = vec!["-it".to_string()];
     all_extra_args.extend(final_config.extra_args);
-    // Combine feature devices into extra args since PodmanAdapter might expect raw args for some
     all_extra_args.extend(final_config.devices);
 
-    // Inject DEVOBOX_CONTAINER marker for context detection
     let mut container_env = final_config.env.clone();
     container_env.push("DEVOBOX_CONTAINER=1".to_string());
 
@@ -392,15 +478,40 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
 
-    #[test]
-    fn test_ssh_feature_generates_ro_mount() {
-        // We can't easily mock env vars safely in parallel tests without a mutex or strictly serial tests,
-        // but we can verify the logic structure if we extracted the path generation logic.
-        // For now, we test the Feature impl roughly by instantiation.
-        let feature = SshFeature;
-        // Just ensure it implements the trait
-        let _ = feature.configure(&BuildContext {});
+    // Mutex para serializar testes que modificam variáveis de ambiente,
+    // evitando "flaky tests" devido à natureza global de std::env.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    // Helper para executar testes com variáveis de ambiente controladas
+    fn with_env_vars<F>(vars: Vec<(&str, Option<&str>)>, test: F)
+    where
+        F: FnOnce(),
+    {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mut original_vars = Vec::new();
+
+        for (key, val) in &vars {
+            original_vars.push((key, std::env::var(key)));
+            match val {
+                Some(v) => unsafe { std::env::set_var(key, v) },
+                None => unsafe { std::env::remove_var(key) },
+            }
+        }
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(test));
+
+        for (key, val) in original_vars {
+            match val {
+                Ok(v) => unsafe { std::env::set_var(key, v) },
+                Err(_) => unsafe { std::env::remove_var(key) },
+            }
+        }
+
+        if let Err(err) = result {
+            std::panic::resume_unwind(err);
+        }
     }
 
     #[test]
@@ -408,61 +519,126 @@ mod tests {
         let f1 = ContainerConfigFragment {
             volumes: vec!["v1".into()],
             env: vec!["e1".into()],
-            devices: vec![],
-            extra_args: vec![],
+            devices: vec!["d1".into()],
+            extra_args: vec!["a1".into()],
         };
         let f2 = ContainerConfigFragment {
             volumes: vec!["v2".into()],
             env: vec!["e2".into()],
-            devices: vec!["d1".into()],
-            extra_args: vec!["a1".into()],
+            devices: vec!["d2".into()],
+            extra_args: vec!["a2".into()],
         };
 
         let merged = f1.merge(f2);
         assert_eq!(merged.volumes, vec!["v1", "v2"]);
         assert_eq!(merged.env, vec!["e1", "e2"]);
-        assert_eq!(merged.devices, vec!["d1"]);
-        assert_eq!(merged.extra_args, vec!["a1"]);
+        assert_eq!(merged.devices, vec!["d1", "d2"]);
+        assert_eq!(merged.extra_args, vec!["a1", "a2"]);
     }
 
     #[test]
-    fn test_persistence_feature_config() {
-        let feature = PersistenceFeature;
+    fn test_podman_feature_inception_prevention() {
+        with_env_vars(vec![("DEVOBOX_CONTAINER", Some("1"))], || {
+            let feature = PodmanFeature;
+            let ctx = BuildContext {};
+            let result = feature.configure(&ctx).unwrap();
 
+            assert!(
+                result.is_none(),
+                "PodmanFeature deve retornar None se DEVOBOX_CONTAINER estiver definido"
+            );
+        });
+    }
+
+    #[test]
+    fn test_podman_feature_no_socket() {
+        with_env_vars(
+            vec![
+                ("DEVOBOX_CONTAINER", None),
+                ("PODMAN_SOCK", None),
+                ("XDG_RUNTIME_DIR", None),
+            ],
+            || {
+                let feature = PodmanFeature;
+                let ctx = BuildContext {};
+                let result = feature.configure(&ctx).unwrap();
+                assert!(
+                    result.is_none(),
+                    "Sem socket detectável, deve retornar None"
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn test_ssh_feature_basic_config() {
+        with_env_vars(
+            vec![("SSH_AUTH_SOCK", None), ("HOME", Some("/tmp"))],
+            || {
+                let feature = SshFeature;
+                let ctx = BuildContext {};
+                let res = feature.configure(&ctx).unwrap();
+
+                assert!(res.is_some());
+                let config = res.unwrap();
+
+                assert!(
+                    config
+                        .volumes
+                        .iter()
+                        .any(|v| v.contains(":/home/dev/.ssh:ro")),
+                    "Deve montar ~/.ssh como read-only"
+                );
+                assert!(config.env.is_empty());
+            },
+        );
+    }
+
+    #[test]
+    fn test_persistence_feature_volumes() {
+        let feature = PersistenceFeature;
         let ctx = BuildContext {};
         let config = feature.configure(&ctx).unwrap().unwrap();
 
-        // Check if critical volumes are present
-        assert!(
-            config
-                .volumes
-                .iter()
-                .any(|v| v.contains("devobox_data_mise"))
-        );
-        assert!(
-            config
-                .volumes
-                .iter()
-                .any(|v| v.contains("devobox_data_cargo"))
-        );
-        assert!(
-            config
-                .volumes
-                .iter()
-                .any(|v| v.contains("devobox_data_bash_history"))
-        );
+        let required_volumes = vec![
+            "devobox_data_mise",
+            "devobox_data_cargo",
+            "devobox_data_bash_history",
+            "devobox_data_nvim_state",
+        ];
 
-        // Ensure no env vars or devices are set by default for persistence
-        assert!(config.env.is_empty());
-        assert!(config.devices.is_empty());
+        for vol in required_volumes {
+            assert!(
+                config.volumes.iter().any(|v| v.contains(vol)),
+                "Configuração de persistência deve conter volume '{}'",
+                vol
+            );
+        }
     }
 
     #[test]
-    fn test_container_config_fragment_default() {
-        let config = ContainerConfigFragment::default();
-        assert!(config.volumes.is_empty());
-        assert!(config.env.is_empty());
-        assert!(config.devices.is_empty());
-        assert!(config.extra_args.is_empty());
+    fn test_codemount_feature() {
+        with_env_vars(
+            vec![("DEVOBOX_CODE_DIR", Some("/tmp/my-code-project"))],
+            || {
+                let feature = CodeMountFeature;
+                let ctx = BuildContext {};
+                std::fs::create_dir_all("/tmp/my-code-project").ok();
+
+                let res = feature.configure(&ctx).unwrap();
+                assert!(res.is_some());
+                let config = res.unwrap();
+
+                assert!(
+                    config
+                        .volumes
+                        .iter()
+                        .any(|v| v.starts_with("/tmp/my-code-project:")),
+                    "Deve montar o diretório de código especificado via ENV"
+                );
+
+                std::fs::remove_dir_all("/tmp/my-code-project").ok();
+            },
+        );
     }
 }
