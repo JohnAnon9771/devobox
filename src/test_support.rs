@@ -26,6 +26,7 @@ pub struct MockContainerSpec {
     pub healthcheck_retries: Option<u32>,
 }
 
+#[derive(Debug)]
 pub struct MockRuntime {
     containers: RwLock<HashMap<String, MockContainer>>,
     commands: RwLock<Vec<String>>,
@@ -87,11 +88,12 @@ impl MockRuntime {
     }
 
     fn check_fail(&self, operation: &str) -> Result<()> {
-        if let Some(ref fail_on) = *self.fail_on.read().unwrap() {
-            if fail_on == operation {
-                bail!("Mock failure on: {}", operation);
-            }
+        if let Some(ref fail_on) = *self.fail_on.read().unwrap()
+            && fail_on == operation
+        {
+            bail!("Mock failure on: {}", operation);
         }
+
         Ok(())
     }
 }

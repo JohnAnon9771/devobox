@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
 use tracing::{debug, info, warn};
 
+#[derive(Debug)]
 pub struct PodmanAdapter;
 
 impl PodmanAdapter {
@@ -169,13 +170,16 @@ impl ContainerRuntime for PodmanAdapter {
     }
 
     fn is_command_available(&self, _cmd: &str) -> bool {
-        Command::new("podman")
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *AVAILABLE.get_or_init(|| {
+            Command::new("podman")
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        })
     }
 
     fn build_image(&self, tag: &str, containerfile: &Path, context_dir: &Path) -> Result<()> {
@@ -298,13 +302,27 @@ where
     if quiet {
         cmd.stdout(Stdio::null());
         cmd.stderr(Stdio::piped());
-        let output = cmd.output().with_context(|| context.to_string())?;
-        let stderr = if !output.status.success() {
-            Some(String::from_utf8_lossy(&output.stderr).to_string())
+
+        let mut child = cmd.spawn().with_context(|| context.to_string())?;
+
+        let stderr_result = if let Some(stderr) = child.stderr.take() {
+            use std::io::Read;
+            // Limit to 32KB of stderr to prevent OOM on massive failure logs
+            let mut buffer = Vec::new();
+            let _ = stderr.take(32 * 1024).read_to_end(&mut buffer);
+            Some(String::from_utf8_lossy(&buffer).to_string())
         } else {
             None
         };
-        Ok((output.status, stderr))
+
+        let status = child.wait().with_context(|| context.to_string())?;
+
+        let stderr = if !status.success() {
+            stderr_result
+        } else {
+            None
+        };
+        Ok((status, stderr))
     } else {
         let status = cmd.status().with_context(|| context.to_string())?;
         Ok((status, None))

@@ -4,6 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// System-wide Podman operations (build, prune)
+#[derive(Debug, Clone)]
 pub struct SystemService {
     runtime: Arc<dyn ContainerRuntime>,
 }

@@ -1,8 +1,10 @@
+pub mod cli;
 pub mod domain;
 pub mod infra;
 pub mod services;
 
-#[cfg(test)]
+// Make test_support available for integration tests
+// In a real production crate, we might use a feature flag "test-utils"
 pub mod test_support;
 
 pub use domain::{

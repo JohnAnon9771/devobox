@@ -1,5 +1,5 @@
+use crate::infra::config::{default_config_dir, ensure_config_dir, install_default_config};
 use anyhow::Result;
-use devobox::infra::config::{default_config_dir, ensure_config_dir, install_default_config};
 use std::path::Path;
 use tracing::info;
 

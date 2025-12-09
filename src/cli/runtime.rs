@@ -1,10 +1,10 @@
-use anyhow::{Context, Result, bail};
-use devobox::domain::{ContainerState, Service, ServiceKind};
-use devobox::infra::config::{AppConfig, load_app_config, resolve_project_services};
-use devobox::infra::{PodmanAdapter, ProjectDiscovery};
-use devobox::services::{
+use crate::domain::{ContainerState, Service, ServiceKind};
+use crate::infra::config::{AppConfig, load_app_config, resolve_project_services};
+use crate::infra::{PodmanAdapter, ProjectDiscovery};
+use crate::services::{
     CleanupOptions, ContainerService, Orchestrator, SystemService, ZellijService,
 };
+use anyhow::{Context, Result, bail};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -12,26 +12,32 @@ use tracing::{info, warn};
 
 use crate::cli::RuntimeContext;
 
-struct Runtime {
+pub struct Runtime {
     global_config_dir: PathBuf,
     app_config: AppConfig,
     services: Vec<Service>,
-    container_service: Arc<ContainerService>,
-    orchestrator: Orchestrator,
+    pub container_service: Arc<ContainerService>,
+    pub orchestrator: Arc<Orchestrator>,
 }
 
 impl Runtime {
-    fn new(global_config_dir: &Path) -> Result<Self> {
+    pub fn new(global_config_dir: &Path) -> Result<Self> {
+        let runtime = Arc::new(PodmanAdapter::new());
+        Self::with_runtime(global_config_dir, runtime)
+    }
+
+    pub fn with_runtime(
+        global_config_dir: &Path,
+        runtime: Arc<dyn crate::domain::ContainerRuntime>,
+    ) -> Result<Self> {
         let app_config = load_app_config(global_config_dir)?;
 
         // Use resolve_all_services to load local services AND dependencies
-        let services =
-            devobox::infra::config::resolve_all_services(global_config_dir, &app_config)?;
+        let services = crate::infra::config::resolve_all_services(global_config_dir, &app_config)?;
 
-        let runtime = Arc::new(PodmanAdapter::new());
         let container_service = Arc::new(ContainerService::new(runtime.clone()));
         let system_service = Arc::new(SystemService::new(runtime));
-        let orchestrator = Orchestrator::new(container_service.clone(), system_service);
+        let orchestrator = Arc::new(Orchestrator::new(container_service.clone(), system_service));
         Ok(Self {
             global_config_dir: global_config_dir.to_path_buf(),
             app_config,
@@ -41,7 +47,7 @@ impl Runtime {
         })
     }
 
-    fn ensure_dev_container(&self) -> Result<()> {
+    pub fn ensure_dev_container(&self) -> Result<()> {
         self.container_service.ensure_running(
             self.app_config
                 .container
@@ -51,7 +57,7 @@ impl Runtime {
         )
     }
 
-    fn start_services_by_filter(&self, kind_filter: Option<ServiceKind>) -> Result<()> {
+    pub fn start_services_by_filter(&self, kind_filter: Option<ServiceKind>) -> Result<()> {
         if self.services.is_empty() {
             warn!(
                 "  Nenhum serviço configurado em {:?}",
@@ -78,7 +84,7 @@ impl Runtime {
         self.orchestrator.start_all(&svc_names)
     }
 
-    fn stop_services_by_filter(&self, kind_filter: Option<ServiceKind>) -> Result<()> {
+    pub fn stop_services_by_filter(&self, kind_filter: Option<ServiceKind>) -> Result<()> {
         if self.services.is_empty() {
             return Ok(());
         }
@@ -99,53 +105,60 @@ impl Runtime {
         self.orchestrator.stop_all(&svc_names)
     }
 
-    fn restart_services_by_filter(&self, kind_filter: Option<ServiceKind>) -> Result<()> {
+    pub fn restart_services_by_filter(&self, kind_filter: Option<ServiceKind>) -> Result<()> {
         self.stop_services_by_filter(kind_filter.clone())?;
         self.start_services_by_filter(kind_filter)
     }
 
-    fn start_svc(&self, service_name: &str) -> Result<()> {
+    pub fn start_svc(&self, service_name: &str) -> Result<()> {
         let svc = self
             .services
             .iter()
             .find(|s| s.name == service_name)
             .context(format!(
-                "Serviço '{service_name}' não está listado em services.yml"
+                "Serviço '{}' não está listado em services.yml",
+                service_name
             ))?;
 
         self.ensure_svc_created(svc)?;
         self.container_service.start(service_name)
     }
 
-    fn stop_svc(&self, service_name: &str) -> Result<()> {
+    pub fn stop_svc(&self, service_name: &str) -> Result<()> {
         if !self.is_known_svc(service_name) {
-            bail!("Serviço '{service_name}' não está listado em services.yml");
+            bail!(
+                "Serviço '{}' não está listado em services.yml",
+                service_name
+            );
         }
         self.container_service.stop(service_name)
     }
 
-    fn restart_svc(&self, service_name: &str) -> Result<()> {
+    pub fn restart_svc(&self, service_name: &str) -> Result<()> {
         if !self.is_known_svc(service_name) {
-            bail!("Serviço '{service_name}' não está listado em services.yml");
+            bail!(
+                "Serviço '{}' não está listado em services.yml",
+                service_name
+            );
         }
         self.container_service.stop(service_name)?;
         self.container_service.start(service_name)
     }
 
-    fn is_known_svc(&self, name: &str) -> bool {
+    pub fn is_known_svc(&self, name: &str) -> bool {
         self.services.iter().any(|svc| svc.name == name)
     }
 
-    fn status(&self) -> Result<()> {
+    pub fn status(&self) -> Result<()> {
         println!(" Status dos containers:");
         let mut missing = false;
 
         for name in self.all_containers() {
             let container = self.container_service.get_status(&name)?;
             let state = match container.state {
-                devobox::domain::ContainerState::Running => "rodando",
-                devobox::domain::ContainerState::Stopped => "parado",
-                devobox::domain::ContainerState::NotCreated => {
+                crate::domain::ContainerState::Running => "rodando",
+                crate::domain::ContainerState::Stopped => "parado",
+                crate::domain::ContainerState::NotCreated => {
                     missing = true;
                     "não criado"
                 }
@@ -161,7 +174,7 @@ impl Runtime {
         Ok(())
     }
 
-    fn run_shell(&self, with_dbs: bool, auto_stop: bool) -> Result<()> {
+    pub fn run_shell(&self, with_dbs: bool, auto_stop: bool) -> Result<()> {
         if with_dbs {
             self.start_services_by_filter(None)?;
         }
@@ -174,7 +187,7 @@ impl Runtime {
             .name
             .as_deref()
             .context("Main container name not set in config")?;
-        let workdir_in_container = container_workdir()?; // This returns a path *inside* the container
+        let workdir_in_container = container_workdir()?;
 
         info!(
             " Entrando no {} (workdir {:?})",
@@ -192,12 +205,12 @@ impl Runtime {
         result
     }
 
-    fn stop_all_containers(&self) -> Result<()> {
+    pub fn stop_all_containers(&self) -> Result<()> {
         let containers = self.all_containers();
         self.orchestrator.stop_all(&containers)
     }
 
-    fn all_containers(&self) -> Vec<String> {
+    pub fn all_containers(&self) -> Vec<String> {
         let mut names = Vec::with_capacity(self.services.len() + 1);
         names.push(
             self.app_config
@@ -212,15 +225,15 @@ impl Runtime {
         names
     }
 
-    fn cleanup(&self, options: &CleanupOptions) -> Result<()> {
+    pub fn cleanup(&self, options: &CleanupOptions) -> Result<()> {
         self.orchestrator.cleanup(options)
     }
 
-    fn nuke(&self) -> Result<()> {
+    pub fn nuke(&self) -> Result<()> {
         self.orchestrator.nuke_system()
     }
 
-    fn ensure_svc_created(&self, svc: &Service) -> Result<()> {
+    pub fn ensure_svc_created(&self, svc: &Service) -> Result<()> {
         let status = self.container_service.get_status(&svc.name)?;
 
         if status.state == ContainerState::NotCreated {
@@ -473,8 +486,7 @@ pub fn project_up(config_dir: &Path, project_name: &str) -> Result<()> {
 
     if context.is_host() {
         bail!(
-            "'devobox project up' só funciona dentro do container.\n\
-             Use 'devobox' ou 'devobox shell' primeiro."
+            "'devobox project up' só funciona dentro do container.\nUse 'devobox' ou 'devobox shell' primeiro."
         );
     }
 

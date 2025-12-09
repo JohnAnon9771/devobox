@@ -1,7 +1,7 @@
+use crate::infra::PodmanAdapter;
+use crate::infra::config::{load_app_config, load_mise_config};
+use crate::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use anyhow::{Context, Result, bail};
-use devobox::infra::PodmanAdapter;
-use devobox::infra::config::{load_app_config, load_mise_config};
-use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -403,7 +403,7 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
     load_mise_config(&mise_toml_path)?;
 
     info!(" Resolvendo serviços (incluindo dependências)...");
-    let services = devobox::infra::config::resolve_all_services(config_dir, &app_config)?;
+    let services = crate::infra::config::resolve_all_services(config_dir, &app_config)?;
 
     if services.is_empty() {
         warn!("  Nenhum serviço configurado. Pulei criação de serviços.");
@@ -449,7 +449,7 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
 
     let extra_args_refs: Vec<&str> = all_extra_args.iter().map(|s| s.as_str()).collect();
 
-    let dev_spec = devobox::domain::ContainerSpec {
+    let dev_spec = crate::domain::ContainerSpec {
         name: &main_container_name,
         image: &image_name,
         ports: &[],

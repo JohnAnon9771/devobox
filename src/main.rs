@@ -1,7 +1,6 @@
-mod cli;
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use devobox::cli;
 use devobox::domain::ServiceKind;
 use devobox::services::CleanupOptions;
 use tracing::info;

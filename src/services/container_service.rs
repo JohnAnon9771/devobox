@@ -5,6 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+#[derive(Debug, Clone)]
 pub struct ContainerService {
     runtime: Arc<dyn ContainerRuntime>,
 }

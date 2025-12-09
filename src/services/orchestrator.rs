@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
-/// Orchestrates complex workflows involving multiple containers and system operations
+#[derive(Debug, Clone)]
 pub struct Orchestrator {
     container_service: Arc<ContainerService>,
     system_service: Arc<SystemService>,
@@ -72,90 +72,116 @@ impl Orchestrator {
         Ok(())
     }
 
-    /// Starts all containers in the list, continuing even if individual operations fail
+    /// Starts all containers in the list concurrently, waiting for each to become healthy.
     pub fn start_all(&self, services: &[Service]) -> Result<()> {
         if services.is_empty() {
             return Ok(());
         }
 
-        info!(" Iniciando todos os serviços...");
+        info!(" Iniciando todos os serviços em paralelo...");
 
-        for svc in services {
-            match self.container_service.start(&svc.name) {
-                Ok(_) => debug!("Serviço {} iniciado", svc.name),
-                Err(e) => error!("  Falha ao iniciar {}: {}", svc.name, e),
-            }
-        }
+        // `self` here is `&Arc<Orchestrator>`. Cloning `self` gives `Arc<Orchestrator>`.
+        let orchestrator_arc_clone = self.clone();
+        let services_arc: Arc<Vec<Service>> = Arc::new(services.to_vec());
 
-        info!(" Verificando healthchecks...");
+        let mut handles = vec![];
 
-        for svc in services {
-            if svc.healthcheck_command.is_some() {
-                info!("ﱮ Aguardando {} ficar saudável...", svc.name);
-
-                let mut retries = svc.healthcheck_retries.unwrap_or(3);
-                let interval_str = svc.healthcheck_interval.as_deref().unwrap_or("1s");
-                let interval = parse_duration(interval_str).unwrap_or(Duration::from_secs(1));
-
-                loop {
-                    match self.container_service.get_health_status(&svc.name) {
-                        Ok(ContainerHealthStatus::Healthy) => {
-                            info!(" {} está saudável!", svc.name);
-                            break;
-                        }
-                        Ok(ContainerHealthStatus::Starting) => {
-                            debug!("{} ainda iniciando...", svc.name);
-                        }
-                        Ok(ContainerHealthStatus::Unhealthy) => {
-                            warn!(" {} reportou unhealthy.", svc.name);
-
-                            if retries == 0 {
-                                anyhow::bail!(
-                                    "Serviço '{}' falhou no healthcheck após várias tentativas.",
-                                    svc.name
-                                );
-                            }
-
-                            retries -= 1;
-                        }
-                        Ok(ContainerHealthStatus::NotApplicable) => {
-                            warn!(
-                                " {} não tem healthcheck aplicável. Prosseguindo.",
-                                svc.name
-                            );
-
-                            break;
-                        }
-                        Err(e) => {
-                            error!(" Erro ao verificar healthcheck de {}: {}", svc.name, e);
-
-                            if retries == 0 {
-                                anyhow::bail!(
-                                    "Erro persistente ao verificar healthcheck do serviço '{}'.",
-                                    svc.name
-                                );
-                            }
-
-                            retries -= 1;
-                        }
-                        _ => {
-                            debug!("Status desconhecido para {}", svc.name);
-                        }
+        for i in 0..services_arc.len() {
+            let svc = services_arc[i].clone();
+            let orchestrator_for_thread = orchestrator_arc_clone.clone(); // Clone Arc for each thread
+            let handle = thread::spawn(move || {
+                info!("Iniciando serviço: {}", svc.name);
+                match orchestrator_for_thread.container_service.start(&svc.name) {
+                    Ok(_) => debug!("Serviço {} iniciado (comando enviado)", svc.name),
+                    Err(e) => {
+                        error!("  Falha ao iniciar {}: {}", svc.name, e);
+                        return Err(e);
                     }
-
-                    thread::sleep(interval);
                 }
-            } else {
-                info!(
-                    " Serviço '{}' sem healthcheck configurado. Prosseguindo.",
-                    svc.name
-                );
+
+                if svc.healthcheck_command.is_some() {
+                    info!("ﱮ Aguardando {} ficar saudável...", svc.name);
+
+                    let mut retries = svc.healthcheck_retries.unwrap_or(3);
+                    let interval_str = svc.healthcheck_interval.as_deref().unwrap_or("1s");
+                    let interval = parse_duration(interval_str).unwrap_or(Duration::from_secs(1));
+
+                    loop {
+                        match orchestrator_for_thread
+                            .container_service
+                            .get_health_status(&svc.name)
+                        {
+                            Ok(ContainerHealthStatus::Healthy) => {
+                                info!(" {} está saudável!", svc.name);
+                                break;
+                            }
+                            Ok(ContainerHealthStatus::Starting) => {
+                                debug!("{} ainda iniciando...", svc.name);
+                            }
+                            Ok(ContainerHealthStatus::Unhealthy) => {
+                                warn!(" {} reportou unhealthy.", svc.name);
+
+                                if retries == 0 {
+                                    return Err(anyhow::anyhow!(
+                                        "Serviço '{}' falhou no healthcheck após várias tentativas.",
+                                        svc.name
+                                    ));
+                                }
+
+                                retries -= 1;
+                            }
+                            Ok(ContainerHealthStatus::NotApplicable) => {
+                                warn!(
+                                    " {} não tem healthcheck aplicável. Prosseguindo.",
+                                    svc.name
+                                );
+
+                                break;
+                            }
+                            Err(e) => {
+                                error!(" Erro ao verificar healthcheck de {}: {}", svc.name, e);
+
+                                if retries == 0 {
+                                    return Err(anyhow::anyhow!(
+                                        "Erro persistente ao verificar healthcheck do serviço '{}'.",
+                                        svc.name
+                                    ));
+                                }
+
+                                retries -= 1;
+                            }
+                            _ => {
+                                debug!("Status desconhecido para {}", svc.name);
+                            }
+                        }
+
+                        thread::sleep(interval);
+                    }
+                } else {
+                    info!(
+                        " Serviço '{}' sem healthcheck configurado. Prosseguindo.",
+                        svc.name
+                    );
+                }
+                Ok(())
+            });
+            handles.push(handle);
+        }
+
+        let mut all_ok = true;
+        for handle in handles {
+            if let Err(e) = handle.join().unwrap() {
+                error!("Falha na inicialização do serviço: {}", e);
+                all_ok = false;
             }
         }
 
-        info!(" Todos os serviços iniciados e saudáveis (ou sem healthcheck).");
-
-        Ok(())
+        if all_ok {
+            info!(" Todos os serviços iniciados e saudáveis (ou sem healthcheck).");
+            Ok(())
+        } else {
+            anyhow::bail!("Um ou mais serviços falharam ao iniciar.")
+        }
     }
 
     /// Cleans up Podman resources based on options, continuing even if individual operations fail
@@ -211,7 +237,10 @@ impl Orchestrator {
 
 fn parse_duration(s: &str) -> Result<Duration> {
     let s = s.trim();
-    if let Some(stripped) = s.strip_suffix('s') {
+    if let Some(stripped) = s.strip_suffix("ms") {
+        let millis: u64 = stripped.parse()?;
+        Ok(Duration::from_millis(millis))
+    } else if let Some(stripped) = s.strip_suffix('s') {
         let secs: u64 = stripped.parse()?;
         Ok(Duration::from_secs(secs))
     } else if let Some(stripped) = s.strip_suffix('m') {
@@ -420,12 +449,12 @@ mod tests {
 
         mock.add_container(&svc1.name, ContainerState::Stopped);
         mock.add_container(&svc2.name, ContainerState::Stopped);
-        mock.set_fail_on("start");
+        mock.set_fail_on("start"); // Simulate one of them failing to start
 
         let services = vec![svc1.clone(), svc2.clone()];
 
         let result = orchestrator.start_all(&services);
-        assert!(result.is_ok());
+        assert!(result.is_err()); // Now we expect an error if a start command fails
 
         let commands = mock.get_commands();
         assert!(commands.contains(&format!("start:{}", svc1.name)));
@@ -603,11 +632,14 @@ mod tests {
 
         let result = orchestrator.start_all(&services);
         assert!(result.is_err());
+        // The error now bubbles up as a generic "Um ou mais serviços falharam ao iniciar."
+        // but it should contain the underlying healthcheck failure message.
+        // We can check for a more generic part of the message or traverse the error cause chain if needed.
         assert!(
             result
                 .unwrap_err()
                 .to_string()
-                .contains("falhou no healthcheck")
+                .contains("serviços falharam ao iniciar")
         );
 
         let commands = mock.get_commands();

@@ -1,5 +1,6 @@
 use super::{Container, ContainerSpec};
 use anyhow::Result;
+use std::fmt::Debug;
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -12,7 +13,7 @@ pub enum ContainerHealthStatus {
 }
 
 /// Trait for container runtime operations
-pub trait ContainerRuntime: Send + Sync {
+pub trait ContainerRuntime: Send + Sync + Debug {
     /// Get the current state of a container
     fn get_container(&self, name: &str) -> Result<Container>;
 
