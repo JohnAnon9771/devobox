@@ -38,6 +38,10 @@ RUN curl -Lo zellij.tar.gz "https://github.com/zellij-org/zellij/releases/latest
     install zellij -D -t /usr/local/bin/ && \
     rm zellij.tar.gz zellij
 
+# install devobox (enables devobox-in-devobox)
+RUN curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 -o /usr/local/bin/devobox && \
+    chmod +x /usr/local/bin/devobox
+
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME \
     && echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$USERNAME \

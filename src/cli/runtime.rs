@@ -1,11 +1,16 @@
 use anyhow::{Context, Result, bail};
 use devobox::domain::{ContainerState, Service, ServiceKind};
-use devobox::infra::PodmanAdapter;
-use devobox::infra::config::{AppConfig, load_app_config};
-use devobox::services::{CleanupOptions, ContainerService, Orchestrator, SystemService};
+use devobox::infra::config::{AppConfig, load_app_config, resolve_project_services};
+use devobox::infra::{PodmanAdapter, ProjectDiscovery};
+use devobox::services::{
+    CleanupOptions, ContainerService, Orchestrator, SystemService, ZellijService,
+};
+use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn};
+
+use crate::cli::RuntimeContext;
 
 struct Runtime {
     global_config_dir: PathBuf,
@@ -284,52 +289,143 @@ pub fn status(config_dir: &Path) -> Result<()> {
     runtime.status()
 }
 
-pub fn svc_start(config_dir: &Path, service: Option<&str>) -> Result<()> {
+pub fn smart_start(
+    config_dir: &Path,
+    service: Option<&str>,
+    kind: Option<ServiceKind>,
+) -> Result<()> {
     let runtime = Runtime::new(config_dir)?;
-    match service {
-        Some(name) => runtime.start_svc(name),
-        None => runtime.start_services_by_filter(Some(ServiceKind::Generic)),
+
+    if let Some(name) = service {
+        if runtime.is_known_svc(name) {
+            runtime.start_svc(name)
+        } else {
+            // Check if it matches the main container name
+            let main_name = runtime
+                .app_config
+                .container
+                .name
+                .as_deref()
+                .unwrap_or("devobox");
+            if name == main_name {
+                runtime.ensure_dev_container()
+            } else {
+                bail!("Serviço ou container '{}' não encontrado.", name);
+            }
+        }
+    } else {
+        // Start by filter (or all)
+        let start_all = kind.is_none();
+        runtime.start_services_by_filter(kind)?;
+        // Also ensure main container is running if we are starting "everything" (no kind filter)
+        if start_all {
+            runtime.ensure_dev_container()?;
+        }
+        Ok(())
     }
 }
 
-pub fn svc_stop(config_dir: &Path, service: Option<&str>) -> Result<()> {
+pub fn smart_stop(
+    config_dir: &Path,
+    service: Option<&str>,
+    kind: Option<ServiceKind>,
+) -> Result<()> {
     let runtime = Runtime::new(config_dir)?;
-    match service {
-        Some(name) => runtime.stop_svc(name),
-        None => runtime.stop_services_by_filter(Some(ServiceKind::Generic)),
+
+    if let Some(name) = service {
+        if runtime.is_known_svc(name) {
+            runtime.stop_svc(name)
+        } else {
+            let main_name = runtime
+                .app_config
+                .container
+                .name
+                .as_deref()
+                .unwrap_or("devobox");
+            if name == main_name {
+                runtime.container_service.stop(main_name)
+            } else {
+                bail!("Serviço ou container '{}' não encontrado.", name);
+            }
+        }
+    } else {
+        match kind {
+            Some(k) => runtime.stop_services_by_filter(Some(k)),
+            None => runtime.stop_all_containers(),
+        }
     }
 }
 
-pub fn svc_restart(config_dir: &Path, service: Option<&str>) -> Result<()> {
+pub fn smart_restart(
+    config_dir: &Path,
+    service: Option<&str>,
+    kind: Option<ServiceKind>,
+) -> Result<()> {
     let runtime = Runtime::new(config_dir)?;
-    match service {
-        Some(name) => runtime.restart_svc(name),
-        None => runtime.restart_services_by_filter(Some(ServiceKind::Generic)),
+
+    if let Some(name) = service {
+        if runtime.is_known_svc(name) {
+            runtime.restart_svc(name)
+        } else {
+            let main_name = runtime
+                .app_config
+                .container
+                .name
+                .as_deref()
+                .unwrap_or("devobox");
+            if name == main_name {
+                runtime.container_service.stop(main_name)?;
+                runtime.ensure_dev_container()
+            } else {
+                bail!("Serviço ou container '{}' não encontrado.", name);
+            }
+        }
+    } else {
+        match kind {
+            Some(k) => runtime.restart_services_by_filter(Some(k)),
+            None => {
+                runtime.stop_all_containers()?;
+                runtime.start_services_by_filter(None)?;
+                runtime.ensure_dev_container()
+            }
+        }
     }
 }
 
-pub fn db_start(config_dir: &Path, service: Option<&str>) -> Result<()> {
+#[allow(dead_code)]
+pub fn exec_cmd(config_dir: &Path, command: Vec<String>) -> Result<()> {
     let runtime = Runtime::new(config_dir)?;
-    match service {
-        Some(name) => runtime.start_svc(name),
-        None => runtime.start_services_by_filter(Some(ServiceKind::Database)),
-    }
-}
 
-pub fn db_stop(config_dir: &Path, service: Option<&str>) -> Result<()> {
-    let runtime = Runtime::new(config_dir)?;
-    match service {
-        Some(name) => runtime.stop_svc(name),
-        None => runtime.stop_services_by_filter(Some(ServiceKind::Database)),
-    }
-}
+    // Ensure container is running before exec
+    runtime.ensure_dev_container()?;
 
-pub fn db_restart(config_dir: &Path, service: Option<&str>) -> Result<()> {
-    let runtime = Runtime::new(config_dir)?;
-    match service {
-        Some(name) => runtime.restart_svc(name),
-        None => runtime.restart_services_by_filter(Some(ServiceKind::Database)),
+    let main_container_name = runtime
+        .app_config
+        .container
+        .name
+        .as_deref()
+        .context("Main container name not set in config")?;
+
+    let workdir_in_container = container_workdir()?;
+
+    // Construct the podman exec command
+    let mut args = vec!["exec".to_string(), "-it".to_string()];
+    if let Some(wd) = workdir_in_container {
+        args.push("-w".to_string());
+        args.push(wd.to_string_lossy().to_string());
     }
+    args.push(main_container_name.to_string());
+    args.extend(command);
+
+    let status = std::process::Command::new("podman")
+        .args(&args)
+        .status()
+        .context("Falha ao executar comando via podman exec")?;
+
+    if !status.success() {
+        bail!("Comando falhou com status: {:?}", status);
+    }
+    Ok(())
 }
 
 pub fn cleanup(config_dir: &Path, options: &CleanupOptions) -> Result<()> {
@@ -340,6 +436,158 @@ pub fn cleanup(config_dir: &Path, options: &CleanupOptions) -> Result<()> {
 pub fn nuke(config_dir: &Path) -> Result<()> {
     let runtime = Runtime::new(config_dir)?;
     runtime.nuke()
+}
+
+/// Lists all available projects
+pub fn project_list(_config_dir: &Path) -> Result<()> {
+    let discovery = ProjectDiscovery::new(None)?;
+    let projects = discovery.discover_all()?;
+
+    if projects.is_empty() {
+        info!(" Nenhum projeto encontrado em ~/code");
+        info!(" Dica: Crie um diretório com devobox.toml para começar");
+        info!("");
+        info!(" Exemplo:");
+        info!("   mkdir -p ~/code/meu-projeto");
+        info!("   cd ~/code/meu-projeto");
+        info!("   echo '[project]' > devobox.toml");
+        return Ok(());
+    }
+
+    info!(" Projetos disponíveis:");
+    for project in projects {
+        let services_info = if project.config.dependencies.services_yml.is_some() {
+            " (com serviços configurados)"
+        } else {
+            ""
+        };
+        info!("  - {}{}", project.name, services_info);
+    }
+
+    Ok(())
+}
+
+/// Activates a project workspace (container context only)
+pub fn project_up(config_dir: &Path, project_name: &str) -> Result<()> {
+    let context = RuntimeContext::detect();
+
+    if context.is_host() {
+        bail!(
+            "'devobox project up' só funciona dentro do container.\n\
+             Use 'devobox' ou 'devobox shell' primeiro."
+        );
+    }
+
+    // 1. Find project
+    let discovery = ProjectDiscovery::new(None)?;
+    let project = discovery
+        .find_project(project_name)?
+        .with_context(|| format!("Projeto '{}' não encontrado em ~/code", project_name))?;
+
+    info!(" Ativando projeto: {}", project.name);
+
+    // 2. Load and start project-specific services
+    let services = resolve_project_services(&project, config_dir)?;
+
+    if !services.is_empty() {
+        info!(" Iniciando {} serviço(s)...", services.len());
+
+        // Create Runtime to access orchestrator
+        let runtime = Runtime::new(config_dir)?;
+
+        // Ensure all services are created first
+        for svc in &services {
+            if let Err(e) = runtime.ensure_svc_created(svc) {
+                warn!("  Aviso ao criar serviço {}: {}", svc.name, e);
+            }
+        }
+
+        // Start all services
+        if let Err(e) = runtime.orchestrator.start_all(&services) {
+            warn!("  Erro ao iniciar serviços: {}", e);
+            warn!("  Continuando mesmo assim...");
+        } else {
+            info!(" Serviços iniciados com sucesso!");
+        }
+    }
+
+    // 3. Log environment variables (can't actually set them for parent shell)
+    if !project.env_vars().is_empty() {
+        info!(" Variáveis de ambiente do projeto:");
+        for env_var in project.env_vars() {
+            info!("   {}", env_var);
+        }
+    }
+
+    // 4. Create/attach Zellij session
+    let zellij = ZellijService::new();
+    let session_name = project.session_name();
+
+    info!(" Abrindo sessão Zellij: {}", session_name);
+    info!(" Diretório de trabalho: {}", project.path.display());
+
+    zellij.attach_or_create(&session_name, &project.path)?;
+
+    Ok(())
+}
+
+/// Shows current project info
+pub fn project_info() -> Result<()> {
+    let context = RuntimeContext::detect();
+
+    info!(" Contexto: {}", context);
+
+    if context.is_host() {
+        info!(" Você está rodando no host (fora do container)");
+        return Ok(());
+    }
+
+    // Try to detect current project from PWD
+    let pwd = env::current_dir()?;
+    let home = env::var("HOME").unwrap_or_else(|_| "/home/dev".to_string());
+    let code_dir = PathBuf::from(&home).join("code");
+
+    if let Ok(stripped) = pwd.strip_prefix(&code_dir) {
+        if let Some(project_name) = stripped.components().next() {
+            info!(
+                " Projeto atual: {}",
+                project_name.as_os_str().to_string_lossy()
+            );
+        } else {
+            info!(" Projeto atual: (raiz de ~/code)");
+        }
+    } else {
+        info!(" Projeto atual: (nenhum - fora de ~/code)");
+    }
+
+    info!(" Diretório: {}", pwd.display());
+
+    // Show active Zellij sessions
+    let zellij = ZellijService::new();
+    if zellij.is_available() {
+        match zellij.list_sessions() {
+            Ok(sessions) if !sessions.is_empty() => {
+                info!("");
+                info!(" Sessões Zellij ativas:");
+                for session in sessions {
+                    info!("   - {}", session);
+                }
+            }
+            Ok(_) => {
+                info!("");
+                info!(" Nenhuma sessão Zellij ativa");
+            }
+            Err(e) => {
+                warn!("  Erro ao listar sessões Zellij: {}", e);
+            }
+        }
+    } else {
+        info!("");
+        info!(" Zellij não está instalado");
+        info!(" Instale com: mise install zellij");
+    }
+
+    Ok(())
 }
 
 fn container_workdir() -> Result<Option<PathBuf>> {

@@ -2,6 +2,7 @@ mod cli;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use devobox::domain::ServiceKind;
 use devobox::services::CleanupOptions;
 use tracing::info;
 use tracing_subscriber::{EnvFilter, fmt};
@@ -115,6 +116,11 @@ enum Commands {
         #[arg(long)]
         all: bool,
     },
+    /// Gerenciamento de projetos
+    Project {
+        #[command(subcommand)]
+        action: ProjectAction,
+    },
     /// Atualiza o devobox para a versão mais recente disponível no GitHub
     Update,
 }
@@ -159,6 +165,19 @@ enum DbAction {
     },
     /// Mostra status dos bancos
     Status,
+}
+
+#[derive(Subcommand)]
+enum ProjectAction {
+    /// Lista projetos disponíveis em ~/code
+    List,
+    /// Ativa workspace de um projeto (apenas dentro do container)
+    Up {
+        /// Nome do projeto
+        name: String,
+    },
+    /// Mostra informações do contexto atual
+    Info,
 }
 
 fn main() -> Result<()> {
@@ -215,27 +234,39 @@ fn main() -> Result<()> {
         Some(Commands::Down) => cli::runtime::down(&cli.config_dir),
         Some(Commands::Status) => cli::runtime::status(&cli.config_dir),
         Some(Commands::Service { action }) => match action {
-            ServiceAction::Start { service } => {
-                cli::runtime::svc_start(&cli.config_dir, service.as_deref())
-            }
-            ServiceAction::Stop { service } => {
-                cli::runtime::svc_stop(&cli.config_dir, service.as_deref())
-            }
-            ServiceAction::Restart { service } => {
-                cli::runtime::svc_restart(&cli.config_dir, service.as_deref())
-            }
+            ServiceAction::Start { service } => cli::runtime::smart_start(
+                &cli.config_dir,
+                service.as_deref(),
+                Some(ServiceKind::Generic),
+            ),
+            ServiceAction::Stop { service } => cli::runtime::smart_stop(
+                &cli.config_dir,
+                service.as_deref(),
+                Some(ServiceKind::Generic),
+            ),
+            ServiceAction::Restart { service } => cli::runtime::smart_restart(
+                &cli.config_dir,
+                service.as_deref(),
+                Some(ServiceKind::Generic),
+            ),
             ServiceAction::Status => cli::runtime::status(&cli.config_dir),
         },
         Some(Commands::Db { action }) => match action {
-            DbAction::Start { service } => {
-                cli::runtime::db_start(&cli.config_dir, service.as_deref())
-            }
-            DbAction::Stop { service } => {
-                cli::runtime::db_stop(&cli.config_dir, service.as_deref())
-            }
-            DbAction::Restart { service } => {
-                cli::runtime::db_restart(&cli.config_dir, service.as_deref())
-            }
+            DbAction::Start { service } => cli::runtime::smart_start(
+                &cli.config_dir,
+                service.as_deref(),
+                Some(ServiceKind::Database),
+            ),
+            DbAction::Stop { service } => cli::runtime::smart_stop(
+                &cli.config_dir,
+                service.as_deref(),
+                Some(ServiceKind::Database),
+            ),
+            DbAction::Restart { service } => cli::runtime::smart_restart(
+                &cli.config_dir,
+                service.as_deref(),
+                Some(ServiceKind::Database),
+            ),
             DbAction::Status => cli::runtime::status(&cli.config_dir),
         },
         Some(Commands::Cleanup {
@@ -263,6 +294,11 @@ fn main() -> Result<()> {
             };
             cli::runtime::cleanup(&cli.config_dir, &options)
         }
+        Some(Commands::Project { action }) => match action {
+            ProjectAction::List => cli::runtime::project_list(&cli.config_dir),
+            ProjectAction::Up { name } => cli::runtime::project_up(&cli.config_dir, &name),
+            ProjectAction::Info => cli::runtime::project_info(),
+        },
         Some(Commands::Update) => cli::update::update(),
     }
 }

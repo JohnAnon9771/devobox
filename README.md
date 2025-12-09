@@ -145,6 +145,11 @@ devobox install            # Apenas instala configs (sem build)
 devobox rebuild            # Reconstrói imagem e containers
 devobox build              # Alias de 'rebuild'
 devobox status             # Ver status de todos os containers
+
+# Gerenciar projetos (dentro do container)
+devobox project list       # Lista projetos em ~/code
+devobox project up <nome>  # Ativa workspace do projeto
+devobox project info       # Mostra contexto e projeto atual
 ```
 
 ### 🗄️ Gerenciamento de Containers
@@ -217,6 +222,96 @@ devobox service stop       # Para serviços genéricos
 devobox service restart
 devobox service status
 ```
+
+### 📁 Gerenciamento de Projetos (Novo em v0.5.0+)
+
+O Devobox agora suporta gerenciamento de projetos como **workspaces lógicos** dentro do container principal. Cada projeto pode ter seus próprios serviços e sessões isoladas do Zellij.
+
+#### Listar Projetos
+
+```bash
+devobox project list         # Lista todos os projetos em ~/code
+```
+
+#### Ativar Workspace de um Projeto (Dentro do Container)
+
+```bash
+# Dentro do container devobox
+devobox project up meu-app   # Ativa o projeto (inicia serviços + sessão Zellij)
+```
+
+O comando `project up` realiza:
+1. Inicia os serviços específicos do projeto
+2. Carrega variáveis de ambiente do projeto
+3. Cria/anexa uma sessão Zellij dedicada
+4. Muda para o diretório do projeto
+
+#### Ver Informações do Contexto Atual
+
+```bash
+devobox project info         # Mostra contexto (Host/Container) e projeto atual
+```
+
+#### Estrutura de um Projeto
+
+Um projeto é um diretório em `~/code` com um arquivo `devobox.toml`:
+
+```bash
+~/code/meu-app/
+├── devobox.toml           # Configuração do projeto
+├── services.yml           # Serviços específicos (opcional)
+└── src/                   # Código do projeto
+```
+
+**Exemplo de `devobox.toml` de projeto:**
+
+```toml
+[project]
+env = ["NODE_ENV=development", "DEBUG=app:*"]
+shell = "zsh"
+
+[dependencies]
+services_yml = "services.yml"
+```
+
+**Exemplo de `services.yml` de projeto:**
+
+```yaml
+services:
+  - name: app-postgres
+    type: database
+    image: postgres:16
+    ports: ["5433:5432"]
+    env:
+      - POSTGRES_PASSWORD=dev
+      - POSTGRES_DB=myapp
+```
+
+#### Fluxo de Trabalho com Projetos
+
+```bash
+# 1. Entre no devobox
+devobox
+
+# 2. Liste projetos disponíveis
+devobox project list
+
+# 3. Ative um projeto
+devobox project up meu-app
+
+# 4. Trabalhe normalmente (dentro do Zellij)
+# - Código em ~/code/meu-app
+# - Serviços rodando
+# - Env vars carregadas
+
+# 5. Saia do Zellij (Ctrl+O, D)
+# Volta ao shell principal do devobox
+
+# 6. Troque para outro projeto
+devobox project up outro-app
+```
+
+**Nota:** Projetos NÃO são containers. Apenas os serviços satélites rodam em containers. O projeto é um workspace lógico dentro do container principal do Devobox.
 
 ### 🧹 Limpeza de Recursos
 
