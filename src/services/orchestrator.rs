@@ -80,15 +80,15 @@ impl Orchestrator {
 
         info!(" Iniciando todos os serviços em paralelo...");
 
-        // `self` here is `&Arc<Orchestrator>`. Cloning `self` gives `Arc<Orchestrator>`.
-        let orchestrator_arc_clone = self.clone();
-        let services_arc: Arc<Vec<Service>> = Arc::new(services.to_vec());
+        let orchestrator_arc_clone: Arc<Orchestrator> = Arc::new(self.clone());
+        let services_arc: Arc<Vec<Arc<Service>>> =
+            Arc::new(services.iter().map(|s| Arc::new(s.clone())).collect());
 
         let mut handles = vec![];
 
         for i in 0..services_arc.len() {
             let svc = services_arc[i].clone();
-            let orchestrator_for_thread = orchestrator_arc_clone.clone(); // Clone Arc for each thread
+            let orchestrator_for_thread = orchestrator_arc_clone.clone();
             let handle = thread::spawn(move || {
                 info!("Iniciando serviço: {}", svc.name);
                 match orchestrator_for_thread.container_service.start(&svc.name) {
