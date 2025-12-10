@@ -531,14 +531,67 @@ pub fn project_up(config_dir: &Path, project_name: &str) -> Result<()> {
         }
     }
 
-    // 4. Create/attach Zellij session
+    // 4. Gather dependent projects info for layout
+    let mut dependencies_info =
+        Vec::with_capacity(project.config.dependencies.include_projects.len());
+    if !project.config.dependencies.include_projects.is_empty() {
+        for relative_path in &project.config.dependencies.include_projects {
+            let dep_path = project.path.join(relative_path);
+            let canonical_path = match std::fs::canonicalize(&dep_path) {
+                Ok(p) => p,
+                Err(_) => {
+                    warn!("  Caminho de dependência inválido: {:?}", dep_path);
+                    continue;
+                }
+            };
+
+            // Try to load project config to get startup_command
+            let config_path = canonical_path.join("devobox.toml");
+            let startup_command = if config_path.exists() {
+                match std::fs::read_to_string(&config_path) {
+                    Ok(content) => match toml::from_str::<crate::domain::ProjectConfig>(&content) {
+                        Ok(cfg) => cfg.project.and_then(|p| p.startup_command),
+                        Err(_) => None,
+                    },
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
+            let name = canonical_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+
+            dependencies_info.push(crate::services::ProjectLayoutInfo {
+                name,
+                path: canonical_path,
+                startup_command,
+            });
+        }
+    }
+
+    // 5. Create/attach Zellij session
     let zellij = ZellijService::new();
     let session_name = project.session_name();
 
     info!(" Abrindo sessão Zellij: {}", session_name);
     info!(" Diretório de trabalho: {}", project.path.display());
+    if !dependencies_info.is_empty() {
+        info!(" Projetos incluídos no layout: {}", dependencies_info.len());
+    }
 
-    zellij.attach_or_create(&session_name, &project.path)?;
+    zellij.create_with_layout(
+        &session_name,
+        &crate::services::ProjectLayoutInfo {
+            name: project.name.clone(),
+            path: project.path.clone(),
+            startup_command: project.startup_command().map(String::from),
+        },
+        &dependencies_info,
+    )?;
 
     Ok(())
 }

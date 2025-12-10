@@ -66,10 +66,12 @@ Criar um **"Container de Estimação" (Pet Container)**.
 Desenvolvedores que trabalham em microserviços ou múltiplos projetos costumam ter vários arquivos `docker-compose.yml` espalhados.
 
 **O Problema:**
+
 - Rodar 3 instâncias de Postgres para 3 projetos diferentes consome RAM desnecessariamente.
 - Erros de "Connection Refused" porque a aplicação sobe antes do banco estar pronto.
 
 **A Solução Devobox (v0.5.0+):**
+
 - **Orquestrador com Healthchecks:** O Devobox espera ativamente até que seus serviços estejam **realmente prontos**.
 - **Separação Banco vs. Serviço:** Distinção clara entre infraestrutura persistente (Postgres, Redis) e serviços auxiliares (Mailhog, Mocks).
 - **Configuração em Cascata:** Configurações globais para o dia a dia e locais para projetos específicos.
@@ -118,6 +120,7 @@ devobox init
 ### Após a Instalação
 
 O comando `devobox init` cuida de tudo:
+
 1. Cria configs em `~/.config/devobox`.
 2. Constrói a imagem base com ferramentas do `mise.toml`.
 3. Instala ferramentas de IA globalmente.
@@ -241,10 +244,12 @@ devobox project up meu-app   # Ativa o projeto (inicia serviços + sessão Zelli
 ```
 
 O comando `project up` realiza:
-1. Inicia os serviços específicos do projeto
-2. Carrega variáveis de ambiente do projeto
-3. Cria/anexa uma sessão Zellij dedicada
-4. Muda para o diretório do projeto
+
+1.  Inicia os serviços específicos do projeto e de todos os `include_projects`.
+2.  Carrega variáveis de ambiente do projeto.
+3.  Cria/anexa uma sessão Zellij dedicada.
+4.  Muda para o diretório do projeto.
+5.  **NOVO:** Executa o `startup_command` do projeto principal e de todos os `include_projects` (cada um em uma aba separada do Zellij).
 
 #### Ver Informações do Contexto Atual
 
@@ -269,6 +274,7 @@ Um projeto é um diretório em `~/code` com um arquivo `devobox.toml`:
 [project]
 env = ["NODE_ENV=development", "DEBUG=app:*"]
 shell = "zsh"
+startup_command = "npm start" # Ex: "cargo run", "yarn dev", "python app.py"
 
 [dependencies]
 services_yml = "services.yml"
@@ -392,37 +398,80 @@ services:
 ### Container Base: Debian Bookworm
 
 **Ferramentas:**
+
 - `build-essential`, `git`, `curl`, `wget`, `openssh`, `vim`
 
 **Gerenciador de Runtime:**
+
 - **[Mise](https://mise.jdx.dev/)** - Gerencia versões de linguagens (Node, Rust, Python, etc) globalmente dentro do container.
 
 **IA Integration:**
+
 - Ferramentas como `@anthropic-ai/claude-code` e `@google/gemini-cli` instaladas globalmente.
 
 ## 📚 Casos de Uso Avançados
 
 ### Orquestração de Microsserviços ("App as a Service")
 
-Você sabia que pode usar o Devobox para subir automaticamente outros projetos dos quais você depende?
+O Devobox é um orquestrador poderoso para ambientes de microsserviços. Com a nova funcionalidade de `startup_command` em conjunto com `include_projects`, você pode fazer com que o Devobox suba não apenas a infraestrutura (bancos, filas) dos seus projetos dependentes, mas também suas **aplicações principais** (servidores, APIs) automaticamente, cada uma em uma aba separada do Zellij.
 
-Imagine que você está trabalhando no Frontend (`my-frontend`) e precisa que a API (`my-api`) esteja rodando. Você pode configurar o `my-api` para rodar como um container auxiliar, gerenciado automaticamente pelo Devobox.
+**Como funciona:**
+
+1.  **Configure o `startup_command`** em cada projeto (ex: `backend-api`, `auth-service`) no seu `devobox.toml`:
+
+    ```toml
+    # ~/code/backend-api/devobox.toml
+    [project]
+    name = "backend-api"
+    startup_command = "npm run dev" # ou "cargo run", "python app.py"
+    ```
+
+2.  **Liste os projetos dependentes** no `devobox.toml` do seu projeto principal (ex: `my-frontend`):
+
+    ```toml
+    # ~/code/my-frontend/devobox.toml
+
+    [project]
+    name = "my-frontend"
+    startup_command = "vite dev" # O comando para o seu frontend
+
+    [dependencies]
+    include_projects = [
+        "../backend-api",
+        "../auth-service"
+    ]
+    ```
+
+3.  **Execute `devobox project up my-frontend`:**
+    O Devobox fará o seguinte:
+    - Iniciará os serviços (`services.yml`) de `my-frontend`, `backend-api` e `auth-service`.
+    - Criará uma sessão Zellij para `my-frontend`.
+    - Nessa sessão, abrirá abas separadas para:
+      - `my-frontend` (rodando `vite dev`)
+      - `backend-api` (rodando `npm run dev`)
+      - `auth-service` (rodando seu respectivo `startup_command`)
+
+Isso simplifica drasticamente o fluxo de trabalho de desenvolvimento em ambientes de microsserviços, permitindo que você suba todo o seu ecossistema com um único comando e tenha tudo organizado em uma única sessão Zellij.
 
 [➡️ Leia o guia completo de Microsserviços](docs/microservices.md)
 
 ## 🐛 Troubleshooting
 
 ### Container não inicia
+
 ```bash
 podman logs devobox
 devobox rebuild
 ```
 
 ### Permissões de arquivo
+
 O Devobox usa `--userns=keep-id` para mapear seu UID do host, evitando problemas de `permission denied` em arquivos criados dentro do container.
 
 ### Performance lenta de I/O
+
 Se usar Btrfs/ZFS, desabilite Copy-on-Write para o diretório do Podman:
+
 ```bash
 sudo chattr +C ~/.local/share/containers/storage
 ```

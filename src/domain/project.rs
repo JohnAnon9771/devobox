@@ -34,6 +34,10 @@ pub struct ProjectSettings {
     /// Shell to use (bash, zsh, fish)
     #[serde(default)]
     pub shell: Option<String>,
+
+    /// Command to run when starting the project
+    #[serde(default)]
+    pub startup_command: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
@@ -72,6 +76,14 @@ impl Project {
             .project
             .as_ref()
             .and_then(|p| p.shell.as_deref())
+    }
+
+    /// Get startup command for this project
+    pub fn startup_command(&self) -> Option<&str> {
+        self.config
+            .project
+            .as_ref()
+            .and_then(|p| p.startup_command.as_deref())
     }
 
     /// Get services.yml path if configured
@@ -122,6 +134,7 @@ mod tests {
             project: Some(ProjectSettings {
                 env: vec!["NODE_ENV=development".into(), "DEBUG=app:*".into()],
                 shell: None,
+                startup_command: None,
             }),
             ..Default::default()
         };
