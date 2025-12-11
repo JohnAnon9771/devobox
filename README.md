@@ -264,7 +264,6 @@ Um projeto é um diretório em `~/code` com um arquivo `devobox.toml`:
 ```bash
 ~/code/meu-app/
 ├── devobox.toml           # Configuração do projeto
-├── services.yml           # Serviços específicos (opcional)
 └── src/                   # Código do projeto
 ```
 
@@ -277,23 +276,24 @@ shell = "zsh"
 startup_command = "npm start" # Ex: "cargo run", "yarn dev", "python app.py"
 
 [dependencies]
-services_yml = "services.yml"
 ```
 
 **Exemplo de `services.yml` de projeto:**
 
 ```yaml
+
+```toml
+[services.app-postgres]
+type = "database"
+image = "postgres:16"
+ports = ["5433:5432"]
+env = [
+    "POSTGRES_PASSWORD=dev",
+    "POSTGRES_DB=myapp"
+]
+```
 services:
   - name: app-postgres
-    type: database
-    image: postgres:16
-    ports: ["5433:5432"]
-    env:
-      - POSTGRES_PASSWORD=dev
-      - POSTGRES_DB=myapp
-```
-
-#### Fluxo de Trabalho com Projetos
 
 ```bash
 # 1. Entre no devobox
@@ -367,30 +367,35 @@ include_projects = [
 workdir = "/home/dev/code/frontend"
 ```
 
-### Arquivo `services.yml`
+### Configuração de Serviços
 
 Agora suporta **Tipos** e **Healthchecks**:
+Serviços agora são definidos diretamente no `devobox.toml` usando seções `[services.NAME]`:
+
+```toml
+
 
 ```yaml
-services:
+[services.pg]
   # Banco de Dados (Controlado por 'devobox db')
-  - name: pg
-    type: database
-    image: docker.io/postgres:16
-    ports: ["5432:5432"]
-    env:
-      - POSTGRES_PASSWORD=dev
-    healthcheck_command: "pg_isready -U dev"
-    healthcheck_interval: "5s"
-    healthcheck_timeout: "3s"
-    healthcheck_retries: 5
+
+type = "database"
+image = "docker.io/postgres:16"
+ports = ["5432:5432"]
+env = ["POSTGRES_PASSWORD=dev"]
+
+healthcheck_command = "pg_isready -U dev"
+healthcheck_interval = "5s"
+healthcheck_timeout = "3s"
+healthcheck_retries = 5
 
   # Serviço Genérico (Controlado por 'devobox service')
   # Se 'type' for omitido, é 'generic' por padrão
-  - name: mailhog
+
+[services.mailhog]
     type: generic
-    image: docker.io/mailhog/mailhog:latest
-    ports: ["1025:1025", "8025:8025"]
+image = "docker.io/mailhog/mailhog:latest"
+ports = ["1025:1025", "8025:8025"]
 ```
 
 ## 🔧 Stack Tecnológico

@@ -219,9 +219,5 @@ include_projects = ["../other-project"]
         assert_eq!(project.env_vars().len(), 2);
         assert_eq!(project.env_vars()[0], "NODE_ENV=development");
         assert_eq!(project.shell(), Some("zsh"));
-        assert_eq!(
-            project.config.dependencies.services_yml,
-            Some(PathBuf::from("services.yml"))
-        );
     }
 }

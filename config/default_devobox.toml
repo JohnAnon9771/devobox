@@ -2,7 +2,6 @@
 
 [paths]
 containerfile = "Containerfile"
-databases_yml = "databases.yml"
 mise_toml = "mise.toml"
 starship_toml = "starship.toml"
 
@@ -12,3 +11,21 @@ image_name = "devobox-img"
 [container]
 name = "devobox"
 workdir = "/home/dev"
+
+# Serviços (opcional)
+# Defina serviços usando seções [services.NAME]
+
+[services.pg]
+image = "docker.io/postgres:16"
+type = "database"
+ports = ["5432:5432"]
+env = ["POSTGRES_PASSWORD=dev"]
+healthcheck_command = "pg_isready -U postgres"
+healthcheck_interval = "5s"
+healthcheck_timeout = "3s"
+healthcheck_retries = 5
+
+[services.redis]
+image = "docker.io/redis:7"
+type = "database"
+ports = ["6379:6379"]

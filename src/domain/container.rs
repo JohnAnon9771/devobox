@@ -46,6 +46,7 @@ pub enum ServiceKind {
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Service {
+    #[serde(default)]
     pub name: String,
     pub image: String,
     #[serde(default, rename = "type")]
@@ -80,5 +81,11 @@ impl Service {
             healthcheck_timeout: self.healthcheck_timeout.as_deref(),
             healthcheck_retries: self.healthcheck_retries,
         }
+    }
+
+    /// Create a Service from TOML HashMap entry (name comes from key)
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = name;
+        self
     }
 }

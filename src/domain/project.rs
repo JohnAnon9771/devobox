@@ -1,5 +1,8 @@
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::path::PathBuf;
+
+use super::Service;
 
 /// Represents a logical project workspace (NOT a container)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,6 +25,10 @@ pub struct ProjectConfig {
     /// Dependencies on other projects (for service resolution)
     #[serde(default)]
     pub dependencies: ProjectDependencies,
+
+    /// Project-specific services
+    #[serde(default)]
+    pub services: Option<HashMap<String, Service>>,
 }
 
 /// Project-specific settings
@@ -42,10 +49,6 @@ pub struct ProjectSettings {
 
 #[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
 pub struct ProjectDependencies {
-    /// Path to services.yml file (relative to project directory)
-    #[serde(default)]
-    pub services_yml: Option<PathBuf>,
-
     /// Other projects to include services from
     #[serde(default)]
     pub include_projects: Vec<PathBuf>,
@@ -85,15 +88,6 @@ impl Project {
             .as_ref()
             .and_then(|p| p.startup_command.as_deref())
     }
-
-    /// Get services.yml path if configured
-    pub fn services_yml_path(&self) -> Option<PathBuf> {
-        self.config
-            .dependencies
-            .services_yml
-            .as_ref()
-            .map(|p| self.path.join(p))
-    }
 }
 
 #[cfg(test)]
@@ -114,7 +108,6 @@ mod tests {
     fn test_project_config_defaults() {
         let config = ProjectConfig::default();
         assert!(config.project.is_none());
-        assert!(config.dependencies.services_yml.is_none());
         assert!(config.dependencies.include_projects.is_empty());
     }
 
@@ -142,23 +135,5 @@ mod tests {
         let project = Project::new("test".into(), PathBuf::from("/test"), config);
         assert_eq!(project.env_vars().len(), 2);
         assert_eq!(project.env_vars()[0], "NODE_ENV=development");
-    }
-
-    #[test]
-    fn test_services_yml_path() {
-        let config = ProjectConfig {
-            dependencies: ProjectDependencies {
-                services_yml: Some(PathBuf::from("services.yml")),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let project = Project::new("test".into(), PathBuf::from("/home/dev/code/test"), config);
-
-        assert_eq!(
-            project.services_yml_path(),
-            Some(PathBuf::from("/home/dev/code/test/services.yml"))
-        );
     }
 }

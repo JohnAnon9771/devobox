@@ -116,7 +116,7 @@ impl Runtime {
             .iter()
             .find(|s| s.name == service_name)
             .context(format!(
-                "Serviço '{}' não está listado em services.yml",
+                "Serviço '{}' não está listado na configuração",
                 service_name
             ))?;
 
@@ -127,7 +127,7 @@ impl Runtime {
     pub fn stop_svc(&self, service_name: &str) -> Result<()> {
         if !self.is_known_svc(service_name) {
             bail!(
-                "Serviço '{}' não está listado em services.yml",
+                "Serviço '{}' não está listado na configuração",
                 service_name
             );
         }
@@ -137,7 +137,7 @@ impl Runtime {
     pub fn restart_svc(&self, service_name: &str) -> Result<()> {
         if !self.is_known_svc(service_name) {
             bail!(
-                "Serviço '{}' não está listado em services.yml",
+                "Serviço '{}' não está listado na configuração",
                 service_name
             );
         }
@@ -469,7 +469,9 @@ pub fn project_list(_config_dir: &Path) -> Result<()> {
 
     info!(" Projetos disponíveis:");
     for project in projects {
-        let services_info = if project.config.dependencies.services_yml.is_some() {
+        let services_info = if project.config.services.is_some()
+            && !project.config.services.as_ref().unwrap().is_empty()
+        {
             " (com serviços configurados)"
         } else {
             ""

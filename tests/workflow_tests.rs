@@ -19,18 +19,13 @@ workdir = "/home/dev"
 
 [build]
 image_name = "devobox:test"
+
+[services.postgres]
+image = "postgres:15"
+type = "database"
+ports = ["5432:5432"]
 "#;
     fs::write(config_path.join("devobox.toml"), devobox_toml)?;
-
-    // Write services.yml
-    let services_yml = r#"
-services:
-  - name: postgres
-    image: postgres:15
-    kind: database
-    ports: ["5432:5432"]
-"#;
-    fs::write(config_path.join("services.yml"), services_yml)?;
 
     // 2. Setup Mock Runtime
     let mock = Arc::new(MockRuntime::new());
@@ -125,7 +120,6 @@ workdir = "/home/dev"
 image_name = "devobox:test"
 "#,
     )?;
-    fs::write(config_path.join("services.yml"), "services: []")?;
 
     // 2. Setup Mock Runtime
     let mock = Arc::new(MockRuntime::new());

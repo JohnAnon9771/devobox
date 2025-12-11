@@ -1,18 +1,11 @@
-use crate::domain::{Project, Service};
+use crate::domain::{Project, ProjectConfig, Service};
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use toml;
 use tracing::{info, warn};
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum ServiceDocument {
-    Root { services: Vec<Service> },
-    List(Vec<Service>),
-}
 
 #[derive(Deserialize, Debug)]
 pub struct MiseConfig {
@@ -32,14 +25,12 @@ pub fn ensure_config_dir(config_dir: &Path) -> Result<()> {
 
 pub const DEFAULT_DEVOBOX_TOML_NAME: &str = "devobox.toml";
 pub const DEFAULT_CONTAINERFILE_NAME: &str = "default_containerfile.dockerfile";
-pub const SERVICES_YML: &str = include_str!("../../config/default_services.yml");
 pub const MISE_TOML: &str = include_str!("../../config/mise.toml");
 pub const STARSHIP_TOML: &str = include_str!("../../config/starship.toml");
 
 #[derive(Deserialize, Debug, Default)]
 pub struct PathsConfig {
     pub containerfile: Option<PathBuf>,
-    pub services_yml: Option<PathBuf>,
     pub mise_toml: Option<PathBuf>,
     pub starship_toml: Option<PathBuf>,
 }
@@ -70,6 +61,9 @@ pub struct AppConfig {
     pub container: ContainerConfig,
     #[serde(default)]
     pub dependencies: DependenciesConfig,
+    /// Services defined inline as [services.NAME]
+    #[serde(default)]
+    pub services: Option<HashMap<String, Service>>,
 }
 
 impl AppConfig {
@@ -78,9 +72,6 @@ impl AppConfig {
     pub fn merge(&mut self, other: AppConfig) {
         if let Some(cf) = other.paths.containerfile {
             self.paths.containerfile = Some(cf);
-        }
-        if let Some(sv) = other.paths.services_yml {
-            self.paths.services_yml = Some(sv);
         }
         if let Some(m) = other.paths.mise_toml {
             self.paths.mise_toml = Some(m);
@@ -112,47 +103,109 @@ impl AppConfig {
             }
             self.dependencies.include_projects = Some(current);
         }
+
+        // Merge services
+        if let Some(other_services) = other.services {
+            match &mut self.services {
+                Some(existing) => {
+                    // Services with same name in 'other' overwrite existing
+                    for (name, service) in other_services {
+                        existing.insert(name, service);
+                    }
+                }
+                None => {
+                    self.services = Some(other_services);
+                }
+            }
+        }
     }
+}
+
+/// Converts services HashMap to Vec<Service> with validation
+fn services_from_hashmap(services_map: &HashMap<String, Service>) -> Result<Vec<Service>> {
+    let mut services = Vec::new();
+
+    for (name, service) in services_map {
+        // Validate service name
+        if name.trim().is_empty() {
+            bail!("Nome de serviço vazio encontrado");
+        }
+
+        // Validate name format (container name restrictions)
+        let first_char = name.chars().next().unwrap();
+        if !first_char.is_alphanumeric() {
+            bail!(
+                "Nome de serviço '{}' deve começar com letra ou número",
+                name
+            );
+        }
+
+        for c in name.chars() {
+            if !c.is_alphanumeric() && c != '_' && c != '.' && c != '-' {
+                bail!(
+                    "Nome de serviço '{}' contém caractere inválido '{}'",
+                    name,
+                    c
+                );
+            }
+        }
+
+        // Validate image
+        if service.image.trim().is_empty() {
+            bail!("Serviço '{}' sem campo 'image'", name);
+        }
+
+        services.push(service.clone().with_name(name.clone()));
+    }
+
+    Ok(services)
 }
 
 pub fn resolve_all_services(start_dir: &Path, start_config: &AppConfig) -> Result<Vec<Service>> {
     let mut all_services = Vec::new();
+    let mut service_names = HashSet::new();
     let mut visited_paths = HashSet::new();
 
-    // Resolve starting path
     visited_paths.insert(fs::canonicalize(start_dir).unwrap_or(start_dir.to_path_buf()));
 
-    // 1. Load services from current project
-    if let Some(services_yml_name) = &start_config.paths.services_yml {
-        let local_services_path = start_dir.join(services_yml_name);
-        if local_services_path.exists() {
-            info!("   Carregando serviços de {:?}...", local_services_path);
-            let services = load_services(&local_services_path)?;
-            all_services.extend(services);
+    // Helper to add services with duplicate detection
+    let mut add_services = |services: Vec<Service>| -> Result<()> {
+        for service in services {
+            if !service_names.insert(service.name.clone()) {
+                warn!("  Serviço duplicado ignorado: {}", service.name);
+                continue;
+            }
+            all_services.push(service);
         }
+        Ok(())
+    };
+
+    // 1. Load services from current config
+    if let Some(services_map) = &start_config.services {
+        info!(
+            "  Carregando {} serviço(s) da configuração atual...",
+            services_map.len()
+        );
+        let services = services_from_hashmap(services_map)?;
+        add_services(services)?;
     }
 
-    // 2. Iterate over dependencies
+    // 2. Load services from dependencies
     if let Some(deps) = &start_config.dependencies.include_projects {
         for relative_path in deps {
             let project_path = start_dir.join(relative_path);
             let canonical_path = match fs::canonicalize(&project_path) {
                 Ok(p) => p,
                 Err(_) => {
-                    warn!(
-                        "  Caminho de dependência inválido ou não encontrado: {:?}",
-                        project_path
-                    );
+                    warn!("  Caminho de dependência inválido: {:?}", project_path);
                     continue;
                 }
             };
 
             if !visited_paths.insert(canonical_path.clone()) {
-                continue; // Already visited
+                continue;
             }
 
-            // Load dependency config (without merging with global again, ideally, but reuse load_app_config for simplicity)
-            // We want the config specifically for THAT directory to find its services.yml
             let dep_config = match load_app_config(&canonical_path) {
                 Ok(cfg) => cfg,
                 Err(e) => {
@@ -164,22 +217,14 @@ pub fn resolve_all_services(start_dir: &Path, start_config: &AppConfig) -> Resul
                 }
             };
 
-            let dep_services_path = canonical_path.join(
-                dep_config
-                    .paths
-                    .services_yml
-                    .unwrap_or(PathBuf::from("services.yml")),
-            );
-
-            if dep_services_path.exists() {
-                info!("   Carregando dependência de {:?}...", dep_services_path);
-                match load_services(&dep_services_path) {
-                    Ok(mut services) => all_services.append(&mut services),
-                    Err(e) => warn!(
-                        "  Erro ao ler serviços de dependência {:?}: {}",
-                        dep_services_path, e
-                    ),
-                }
+            if let Some(dep_services_map) = &dep_config.services {
+                info!(
+                    "  Carregando {} serviço(s) de dependência {:?}...",
+                    dep_services_map.len(),
+                    canonical_path
+                );
+                let services = services_from_hashmap(dep_services_map)?;
+                add_services(services)?;
             }
         }
     }
@@ -195,7 +240,6 @@ pub fn install_default_config(target_dir: &Path) -> Result<()> {
             DEFAULT_CONTAINERFILE_NAME,
             include_str!("../../config/default_containerfile.dockerfile"),
         ),
-        ("services.yml", SERVICES_YML),
         ("mise.toml", MISE_TOML),
         ("starship.toml", STARSHIP_TOML),
         (
@@ -218,19 +262,6 @@ pub fn install_default_config(target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn load_services(path: &Path) -> Result<Vec<Service>> {
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-
-    let content = fs::read_to_string(path).with_context(|| format!("lendo {:?}", path))?;
-    if content.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-
-    parse_services(&content, path)
-}
-
 pub fn load_mise_config(path: &Path) -> Result<MiseConfig> {
     if !path.exists() {
         bail!("mise.toml não encontrado em {:?}", path);
@@ -250,43 +281,6 @@ pub fn containerfile_path(config_dir: &Path) -> PathBuf {
 pub fn read_containerfile_content(config_dir: &Path) -> Result<String> {
     let path = containerfile_path(config_dir);
     fs::read_to_string(&path).with_context(|| format!("lendo Containerfile em {:?}", path))
-}
-
-fn parse_services(content: &str, path: &Path) -> Result<Vec<Service>> {
-    if content.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let doc: ServiceDocument =
-        serde_yml::from_str(content).with_context(|| format!("parse de {:?}", path))?;
-
-    let services = match doc {
-        ServiceDocument::Root { services } => services,
-        ServiceDocument::List(list) => list,
-    };
-
-    let mut names = HashSet::new();
-
-    for (idx, svc) in services.iter().enumerate() {
-        if svc.name.trim().is_empty() {
-            bail!("Entrada {} em {:?} sem 'name'", idx + 1, path);
-        }
-
-        if svc.image.trim().is_empty() {
-            bail!("Entrada {} em {:?} sem 'image'", idx + 1, path);
-        }
-
-        if !names.insert(svc.name.clone()) {
-            bail!(
-                "Entrada {} em {:?} duplicou o nome '{}'",
-                idx + 1,
-                path,
-                svc.name
-            );
-        }
-    }
-
-    Ok(services)
 }
 
 pub fn load_app_config(config_dir: &Path) -> Result<AppConfig> {
@@ -313,9 +307,6 @@ pub fn load_app_config(config_dir: &Path) -> Result<AppConfig> {
     // Default values if not set in any config
     if app_config.paths.containerfile.is_none() {
         app_config.paths.containerfile = Some(PathBuf::from("Containerfile"));
-    }
-    if app_config.paths.services_yml.is_none() {
-        app_config.paths.services_yml = Some(PathBuf::from("services.yml"));
     }
     if app_config.paths.mise_toml.is_none() {
         app_config.paths.mise_toml = Some(PathBuf::from("mise.toml"));
@@ -351,23 +342,31 @@ pub fn load_app_config(config_dir: &Path) -> Result<AppConfig> {
 /// * `Err` - If there was an error loading services
 pub fn resolve_project_services(project: &Project, _config_dir: &Path) -> Result<Vec<Service>> {
     let mut all_services = Vec::new();
+    let mut service_names = HashSet::new();
     let mut visited_paths = HashSet::new();
 
-    // Mark project path as visited
     visited_paths.insert(fs::canonicalize(&project.path).unwrap_or_else(|_| project.path.clone()));
 
-    // 1. Load project's own services if configured
-    if let Some(services_yml_path) = project.services_yml_path() {
-        if services_yml_path.exists() {
-            info!("  Carregando serviços de {:?}...", services_yml_path);
-            let services = load_services(&services_yml_path)?;
-            all_services.extend(services);
-        } else {
-            warn!(
-                "  Arquivo de serviços configurado mas não encontrado: {:?}",
-                services_yml_path
-            );
+    // Helper to add services with duplicate detection
+    let mut add_services = |services: Vec<Service>| -> Result<()> {
+        for service in services {
+            if !service_names.insert(service.name.clone()) {
+                warn!("  Serviço duplicado ignorado: {}", service.name);
+                continue;
+            }
+            all_services.push(service);
         }
+        Ok(())
+    };
+
+    // 1. Load project's own services
+    if let Some(services_map) = &project.config.services {
+        info!(
+            "  Carregando {} serviço(s) do projeto...",
+            services_map.len()
+        );
+        let services = services_from_hashmap(services_map)?;
+        add_services(services)?;
     }
 
     // 2. Load services from project dependencies
@@ -376,31 +375,33 @@ pub fn resolve_project_services(project: &Project, _config_dir: &Path) -> Result
         let canonical_path = match fs::canonicalize(&dep_path) {
             Ok(p) => p,
             Err(_) => {
-                warn!(
-                    "  Caminho de dependência inválido ou não encontrado: {:?}",
-                    dep_path
-                );
+                warn!("  Caminho de dependência inválido: {:?}", dep_path);
                 continue;
             }
         };
 
         if !visited_paths.insert(canonical_path.clone()) {
-            continue; // Already visited
+            continue;
         }
 
-        // Try to load services.yml from dependency
-        let dep_services_path = canonical_path.join("services.yml");
-        if dep_services_path.exists() {
-            info!(
-                "  Carregando serviços de dependência: {:?}...",
-                dep_services_path
-            );
-            match load_services(&dep_services_path) {
-                Ok(mut services) => all_services.append(&mut services),
-                Err(e) => warn!(
-                    "  Erro ao ler serviços de dependência {:?}: {}",
-                    dep_services_path, e
-                ),
+        let dep_config_path = canonical_path.join("devobox.toml");
+        if dep_config_path.exists() {
+            match fs::read_to_string(&dep_config_path) {
+                Ok(content) => match toml::from_str::<ProjectConfig>(&content) {
+                    Ok(dep_config) => {
+                        if let Some(dep_services_map) = &dep_config.services {
+                            info!(
+                                "  Carregando {} serviço(s) de dependência: {:?}...",
+                                dep_services_map.len(),
+                                dep_config_path
+                            );
+                            let services = services_from_hashmap(dep_services_map)?;
+                            add_services(services)?;
+                        }
+                    }
+                    Err(e) => warn!("  Erro ao fazer parse de {:?}: {}", dep_config_path, e),
+                },
+                Err(e) => warn!("  Erro ao ler {:?}: {}", dep_config_path, e),
             }
         }
     }
@@ -411,139 +412,133 @@ pub fn resolve_project_services(project: &Project, _config_dir: &Path) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
-    fn parses_root_databases_key() {
-        let yaml = r#"
-services:
-  - name: pg
-    image: postgres:15
-    ports: ["5432:5432"]
-    env:
-      - POSTGRES_PASSWORD=dev
-    volumes:
-      - /var/lib/postgresql/data
-  - name: redis
-    image: docker.io/redis:7
+    fn parses_services_from_toml() {
+        let toml = r#"
+[services.pg]
+image = "postgres:15"
+type = "database"
+ports = ["5432:5432"]
+env = ["POSTGRES_PASSWORD=dev"]
+
+[services.redis]
+image = "redis:7"
 "#;
 
-        let dbs = parse_services(yaml, Path::new("services.yml")).unwrap();
-        assert_eq!(dbs.len(), 2);
-        assert_eq!(dbs[0].name, "pg");
-        assert_eq!(dbs[0].env, vec!["POSTGRES_PASSWORD=dev".to_string()]);
-        assert_eq!(dbs[0].volumes, vec!["/var/lib/postgresql/data".to_string()]);
-        assert_eq!(dbs[1].ports, Vec::<String>::new());
-        assert!(dbs[1].volumes.is_empty());
+        let config: AppConfig = toml::from_str(toml).unwrap();
+        let services = services_from_hashmap(config.services.as_ref().unwrap()).unwrap();
+
+        assert_eq!(services.len(), 2);
+
+        let pg = services.iter().find(|s| s.name == "pg").unwrap();
+        assert_eq!(pg.image, "postgres:15");
+        assert_eq!(pg.env, vec!["POSTGRES_PASSWORD=dev"]);
+
+        let redis = services.iter().find(|s| s.name == "redis").unwrap();
+        assert_eq!(redis.image, "redis:7");
     }
 
     #[test]
-    fn parses_list_style() {
-        let yaml = r#"
-- name: pg
-  image: postgres:15
-  ports:
-    - "5432:5432"
+    fn parses_service_with_minimal_fields() {
+        let toml = r#"
+[services.minimal]
+image = "minimal:latest"
 "#;
 
-        let dbs = parse_services(yaml, Path::new("services.yml")).unwrap();
-        assert_eq!(dbs.len(), 1);
-        assert_eq!(dbs[0].ports, vec!["5432:5432".to_string()]);
-    }
+        let config: AppConfig = toml::from_str(toml).unwrap();
+        let services = services_from_hashmap(config.services.as_ref().unwrap()).unwrap();
 
-    #[test]
-    fn rejects_duplicate_names() {
-        let yaml = r#"
-services:
-  - name: pg
-    image: postgres:15
-  - name: pg
-    image: postgres:16
-"#;
-
-        let err = parse_services(yaml, Path::new("services.yml")).unwrap_err();
-        assert!(err.to_string().contains("duplicou o nome"));
-    }
-
-    #[test]
-    fn rejects_missing_required_fields() {
-        let yaml = r#"
-- name: ""
-  image: postgres:15
-"#;
-
-        let err = parse_services(yaml, Path::new("services.yml")).unwrap_err();
-        assert!(err.to_string().contains("sem 'name'"));
-    }
-
-    #[test]
-    fn empty_file_is_allowed() {
-        let parsed = parse_services("   \n", Path::new("services.yml"));
-        assert_eq!(parsed.unwrap().len(), 0);
+        assert_eq!(services.len(), 1);
+        assert_eq!(services[0].name, "minimal");
+        assert_eq!(services[0].image, "minimal:latest");
     }
 
     #[test]
     fn rejects_missing_image() {
-        let yaml = r#"
-- name: pg
-  image: ""
+        let toml = r#"
+[services.pg]
+ports = ["5432:5432"]
 "#;
 
-        let err = parse_services(yaml, Path::new("services.yml")).unwrap_err();
-        assert!(err.to_string().contains("sem 'image'"));
+        // Should fail at deserialization (image is required)
+        let result = toml::from_str::<AppConfig>(toml);
+        assert!(result.is_err());
     }
 
     #[test]
-    fn parses_database_with_minimal_fields() {
-        let yaml = r#"
-- name: minimal
-  image: minimal:latest
-"#;
+    fn validates_service_name() {
+        use crate::domain::ServiceKind;
+        let mut services_map = HashMap::new();
+        services_map.insert(
+            "".to_string(),
+            Service {
+                name: String::new(),
+                image: "test".to_string(),
+                kind: ServiceKind::default(),
+                ports: vec![],
+                env: vec![],
+                volumes: vec![],
+                healthcheck_command: None,
+                healthcheck_interval: None,
+                healthcheck_timeout: None,
+                healthcheck_retries: None,
+            },
+        );
 
-        let dbs = parse_services(yaml, Path::new("services.yml")).unwrap();
-        assert_eq!(dbs.len(), 1);
-        assert_eq!(dbs[0].name, "minimal");
-        assert_eq!(dbs[0].image, "minimal:latest");
-        assert!(dbs[0].ports.is_empty());
-        assert!(dbs[0].env.is_empty());
-        assert!(dbs[0].volumes.is_empty());
+        let result = services_from_hashmap(&services_map);
+        assert!(result.is_err());
     }
 
     #[test]
-    fn parses_multiple_databases() {
-        let yaml = r#"
-services:
-  - name: db1
-    image: postgres:15
-  - name: db2
-    image: mysql:8
-  - name: db3
-    image: redis:7
-"#;
+    fn merges_services_from_configs() {
+        use crate::domain::ServiceKind;
+        let mut base = AppConfig::default();
+        let mut base_services = HashMap::new();
+        base_services.insert(
+            "pg".to_string(),
+            Service {
+                name: String::new(),
+                image: "postgres:15".to_string(),
+                kind: ServiceKind::Database,
+                ports: vec![],
+                env: vec![],
+                volumes: vec![],
+                healthcheck_command: None,
+                healthcheck_interval: None,
+                healthcheck_timeout: None,
+                healthcheck_retries: None,
+            },
+        );
+        base.services = Some(base_services);
 
-        let dbs = parse_services(yaml, Path::new("services.yml")).unwrap();
-        assert_eq!(dbs.len(), 3);
-        assert_eq!(dbs[0].name, "db1");
-        assert_eq!(dbs[1].name, "db2");
-        assert_eq!(dbs[2].name, "db3");
+        let mut override_config = AppConfig::default();
+        let mut override_services = HashMap::new();
+        override_services.insert(
+            "redis".to_string(),
+            Service {
+                name: String::new(),
+                image: "redis:7".to_string(),
+                kind: ServiceKind::Database,
+                ports: vec![],
+                env: vec![],
+                volumes: vec![],
+                healthcheck_command: None,
+                healthcheck_interval: None,
+                healthcheck_timeout: None,
+                healthcheck_retries: None,
+            },
+        );
+        override_config.services = Some(override_services);
+
+        base.merge(override_config);
+
+        let services_map = base.services.unwrap();
+        assert_eq!(services_map.len(), 2);
+        assert!(services_map.contains_key("pg"));
+        assert!(services_map.contains_key("redis"));
     }
 
-    #[test]
-    fn preserves_database_order() {
-        let yaml = r#"
-- name: first
-  image: first:1
-- name: second
-  image: second:2
-- name: third
-  image: third:3
-"#;
-
-        let dbs = parse_services(yaml, Path::new("services.yml")).unwrap();
-        assert_eq!(dbs[0].name, "first");
-        assert_eq!(dbs[1].name, "second");
-        assert_eq!(dbs[2].name, "third");
-    }
     #[test]
     fn installs_default_config() {
         let temp_dir = std::env::temp_dir().join("devobox_test_install");
@@ -558,7 +553,12 @@ services:
 
         assert!(target_dir.join("mise.toml").exists());
         assert!(target_dir.join(DEFAULT_CONTAINERFILE_NAME).exists());
-        assert!(target_dir.join("services.yml").exists());
+
+        // Verify that devobox.toml has services
+        let devobox_toml_path = target_dir.join(DEFAULT_DEVOBOX_TOML_NAME);
+        assert!(devobox_toml_path.exists());
+        let content = fs::read_to_string(devobox_toml_path).unwrap();
+        assert!(content.contains("[services."));
 
         // Verify content matches embedded content
         assert_eq!(
