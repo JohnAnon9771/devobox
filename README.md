@@ -6,461 +6,431 @@
 
 > _Desenvolva sem poluir seu sistema, sem perder performance e sem reinventar o ambiente a cada projeto._
 
-[🧭 Novo no Devobox? Comece pelo Guia de Workflow (Como trabalhar)](docs/workflow.md)
+## O que é Devobox?
 
-## 🎯 O Problema
+Devobox é uma ferramenta que cria um **segundo computador dentro do seu Linux** — isolado, persistente e rápido.
 
-O **Devobox** é uma resposta de engenharia para o dilema moderno do desenvolvimento no Linux: **"Como manter meu sistema limpo e estável sem sacrificar o desempenho e a ergonomia do desenvolvimento nativo?"**
+Pense nele como:
 
-Este projeto não é apenas "rodar containers". É criar uma **Estação de Trabalho Híbrida** que resolve 4 problemas fundamentais do desenvolvimento moderno.
+- ✅ Um ambiente de desenvolvimento que **nunca quebra** com updates do sistema
+- ✅ Velocidade de I/O e rede **100% nativa** (zero overhead de VM)
+- ✅ Um **pet digital** que lembra de tudo (histórico shell, ferramentas, estado)
+- ✅ Um **maestro inteligente** que sobe seus serviços na ordem certa
 
-[🥊 Devobox vs. Docker Compose vs. Local: Entenda as diferenças](docs/comparison.md)
+**A diferença:** Você não trata esse container como algo descartável. Ele é seu espaço de trabalho permanente, mas com a higiene e reprodutibilidade de containers.
+
+---
+
+## A Arquitetura: Hub & Spoke
+
+Imagine uma roda de bicicleta:
+
+```
+                ┌──────────────────────┐
+                │   🖥️  SEU PC         │
+                │   (Kernel + GUI)     │
+                └──────────┬───────────┘
+                           │
+                  ┌────────▼────────┐
+                  │   📦 HUB        │
+                  │   (devobox)     │  ← Você trabalha aqui
+                  │   • Código      │
+                  │   • Tools       │
+                  │   • Shell       │
+                  └────────┬────────┘
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+      ┌───▼───┐        ┌───▼───┐       ┌───▼───┐
+      │ 🗄️ PG │        │ 🔴 R  │       │ 📮 MH │  ← Satellites
+      │ :5432 │        │ :6379 │       │ :8025 │  ← Auto-start
+      └───────┘        └───────┘       └───────┘
+```
+
+- **Hub (centro):** Seu workspace onde você escreve código
+- **Spokes (satélites):** Serviços como Postgres, Redis que sobem quando necessário
+
+Tudo isolado. Tudo persistente. Zero fricção.
 
 ---
 
 ## 🏛️ Os 4 Pilares do Devobox
 
-### 1. 🧹 Higiene Absoluta do Host (O Fim do "Dependency Hell")
+### 1. 🧹 Higiene Absoluta do Host
 
-No Arch Linux (Rolling Release), as bibliotecas do sistema (`openssl`, `libicu`, `glibc`) atualizam constantemente.
+**O cenário:**
+No Arch Linux (ou qualquer rolling release), as bibliotecas do sistema (`openssl`, `libicu`, `glibc`) atualizam constantemente. Se você instala Ruby, Node ou Python direto no host, um update pode quebrar tudo.
 
-**O Problema:**
-Se você instala Ruby/Node/Python direto no seu Host, um `pacman -Syu` pode quebrar seu ambiente de desenvolvimento numa segunda-feira de manhã porque a versão do OpenSSL mudou e o Ruby antigo não compila mais.
+**A solução:**
+Isolar **100%** das runtimes de linguagem e bibliotecas dentro do container.
 
-**A Solução Devobox:**
-Isolar **100%** das runtimes de linguagem (Ruby, Node, Rust, Go) e bibliotecas de sistema dentro de uma "caixa de vidro".
-
-- Seu Host fica apenas com: Kernel, Drivers, Interface Gráfica, Editor e Navegador
+- Seu Host fica apenas com: Kernel, Drivers, GUI, Editor e Navegador
 - O resto (gems, node_modules, compiladores) fica contido
-- Se o container quebrar, você recria (`devobox rebuild`). Seu PC continua intacto
+- Se o container quebrar: `devobox rebuild`. Seu PC continua intacto
 
-### 2. ⚡ Performance Nativa (Sem Camadas de Virtualização)
-
-Muitas soluções Docker (como Docker Desktop no Mac/Windows) rodam dentro de uma Máquina Virtual oculta, tornando o acesso aos arquivos lento.
-
-**O Problema:**
-Rodar `bundle install` ou `npm install` em volumes Docker tradicionais pode ser extremamente lento.
-
-**A Solução Devobox:**
-Aproveitar o Linux para usar **Bind Mounts nativos** e **Network Host**.
-
-- **I/O:** O container lê os arquivos na mesma velocidade que o Host. Zero overhead
-- **Rede:** Ao usar `--network host`, removemos a ponte de rede (NAT). O container usa a placa de rede do seu PC. O `localhost` do container **é** o `localhost` do seu PC. Isso elimina a complexidade de mapear portas (`-p 3000:3000`)
-
-### 3. 🐕 Ergonomia de "Pet" vs. "Cattle"
-
-A filosofia Docker tradicional trata containers como gado (descartáveis e efêmeros). Para desenvolvimento, isso é inadequado.
-
-**O Problema:**
-Em ambientes Docker Compose puros, toda vez que você derruba o container, você perde o histórico do terminal (Ctrl+R), seus aliases temporários, e tem que reinstalar ferramentas de debug.
-
-**A Solução Devobox:**
-Criar um **"Container de Estimação" (Pet Container)**.
-
-- Define suas ferramentas em `mise.toml`
-- O container é imutável e reprodutível
-- Se comporta como um **segundo computador** que está sempre lá, mas com configuração declarativa
-
-### 4. 💾 Eficiência e Controle Granular
-
-Desenvolvedores que trabalham em microserviços ou múltiplos projetos costumam ter vários arquivos `docker-compose.yml` espalhados.
-
-**O Problema:**
-
-- Rodar 3 instâncias de Postgres para 3 projetos diferentes consome RAM desnecessariamente.
-- Erros de "Connection Refused" porque a aplicação sobe antes do banco estar pronto.
-
-**A Solução Devobox (v0.5.0+):**
-
-- **Orquestrador com Healthchecks:** O Devobox espera ativamente até que seus serviços estejam **realmente prontos**.
-- **Separação Banco vs. Serviço:** Distinção clara entre infraestrutura persistente (Postgres, Redis) e serviços auxiliares (Mailhog, Mocks).
-- **Configuração em Cascata:** Configurações globais para o dia a dia e locais para projetos específicos.
-- **Dependências entre Projetos:** Um projeto pode importar automaticamente a infraestrutura de outro.
+**O benefício:** Nunca mais perca uma manhã inteira por causa de um update de biblioteca.
 
 ---
 
-## 📋 Requisitos
+### 2. ⚡ Performance Nativa
 
-- **Podman** instalado no sistema
-- **Linux** (otimizado para Arch Linux)
+**O cenário:**
+Muitas soluções Docker (como Docker Desktop) rodam dentro de uma VM oculta. Isso torna `npm install` e `bundle install` dolorosamente lentos.
+
+**A solução:**
+Aproveitar o Linux para usar **Bind Mounts nativos** e **Network Host**.
+
+- **I/O:** O container lê arquivos na mesma velocidade que o host. Zero overhead
+- **Rede:** Com `--network host`, removemos o NAT. O `localhost` do container **é** o `localhost` do seu PC
+
+**O benefício:** Trabalhe na velocidade do seu SSD, não na velocidade de um driver de virtualização.
+
+---
+
+### 3. 🐕 Filosofia "Pet" vs "Cattle"
+
+**O cenário:**
+Containers Docker tradicionais são tratados como gado (cattle) — descartáveis e efêmeros. Toda vez que você derruba o container, perde:
+
+- Histórico do terminal (Ctrl+R)
+- Aliases temporários
+- Ferramentas de debug instaladas
+
+**A solução:**
+Criar um **Pet Container** — um ambiente persistente que se comporta como um segundo computador.
+
+- Define ferramentas em `mise.toml` (reprodutível)
+- O container é imutável mas sempre disponível
+- Histórico, estado e sessões persistem via Zellij
+
+**O benefício:** Entre e saia quando quiser. Tudo estará exatamente como você deixou.
+
+---
+
+### 4. 💾 Orquestração Inteligente
+
+**O cenário:**
+Trabalhar com microserviços geralmente significa:
+
+- Múltiplos `docker-compose.yml` espalhados
+- 3 instâncias de Postgres rodando (desperdício de RAM)
+- Erros de "Connection Refused" porque a app sobe antes do banco
+
+**A solução:**
+Um orquestrador com healthchecks ativos e controle granular.
+
+- **Healthchecks:** Devobox espera ativamente até que serviços estejam prontos
+- **Separação clara:** Bancos (pesados) vs Serviços (leves)
+- **Configuração em cascata:** Global para o dia a dia, local para projetos
+- **Dependências entre projetos:** Um projeto pode importar a infraestrutura de outro
+
+**O benefício:** Seus serviços sobem na ordem certa. Sempre.
+
+---
+
+## 🚀 Instalação Rápida
+
+### Requisitos
+
+- **Podman** instalado
+- **Linux** (otimizado para Arch, funciona em Ubuntu/Fedora)
 - `~/.local/bin` no seu PATH
 
-## 🚀 Instalação
-
-### Método 1: Instalar via Release (Recomendado)
+### Método 1: Via Release (Recomendado)
 
 ```bash
-# Instalar
-curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 -o ~/.local/bin/devobox && chmod +x ~/.local/bin/devobox
+# Baixar e instalar
+curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 \
+  -o ~/.local/bin/devobox && chmod +x ~/.local/bin/devobox
 
 # Adicionar ao PATH (se necessário)
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 
-# Configurar ambiente
+# Setup completo
 devobox init
 ```
 
-### Método 2: Compilar do Código Fonte
+### Método 2: Compilar do Fonte
 
 ```bash
-# 1. Clonar repositório
 git clone https://github.com/JohnAnon9771/devobox.git
 cd devobox
-
-# 2. Compilar
 cargo build --release
-
-# 3. Instalar
 install -Dm755 ./target/release/devobox ~/.local/bin/devobox
-
-# 4. Configurar ambiente (setup automático)
 devobox init
 ```
 
-### Após a Instalação
+### O que `devobox init` faz?
 
-O comando `devobox init` cuida de tudo:
+1. Cria configs em `~/.config/devobox`
+2. Constrói imagem base Debian com ferramentas do `mise.toml`
+3. Prepara containers de serviço
+4. Tudo pronto em ~5 minutos
 
-1. Cria configs em `~/.config/devobox`.
-2. Constrói a imagem base com ferramentas do `mise.toml`.
-3. Instala ferramentas de IA globalmente.
-4. Prepara os containers de serviço.
+**Protip:** Se você rodar `devobox` sem setup, ele detecta e executa `init` automaticamente!
 
-**Ainda mais fácil:** Se você executar `devobox` sem fazer o setup, ele detecta e executa o `init` automaticamente!
+---
 
-## 🛠️ Comandos
+## 🎯 O que Você Pode Fazer?
 
-### 🎯 Comandos Essenciais (Uso Diário)
+### 🧹 Manter Seu Sistema Limpo
 
-```bash
-# Abrir shell de desenvolvimento (comando padrão)
-devobox                    # Abre o shell (auto-setup se necessário)
-devobox -d                 # Abre o shell com TODOS os serviços (bancos + genéricos) iniciados
-devobox --with-dbs         # Forma longa de -d
-
-# Comandos alternativos
-devobox shell              # Shell sem iniciar serviços automaticamente
-devobox dev                # Shell com serviços (equivale a -d)
-
-# Gerenciar ambiente
-devobox init               # Setup inicial completo (install + build)
-devobox install            # Apenas instala configs (sem build)
-devobox rebuild            # Reconstrói imagem e containers
-devobox build              # Alias de 'rebuild'
-devobox status             # Ver status de todos os containers
-
-# Gerenciar projetos (dentro do container)
-devobox project list       # Lista projetos em ~/code
-devobox project up <nome>  # Ativa workspace do projeto
-devobox project info       # Mostra contexto e projeto atual
-```
-
-### 🗄️ Gerenciamento de Containers
+Instale Node 20, Ruby 3.2, Python 3.11 sem tocar no seu OS host.
 
 ```bash
-# Subir/Parar containers
-devobox up                 # Sobe tudo (Pet + Bancos + Serviços + Dependências)
-devobox start              # Alias de 'up'
-devobox down               # Para todos os containers
-devobox stop               # Alias de 'down'
-
-# Filtros de Inicialização
-devobox up --dbs-only      # Sobe apenas o que é 'type: database'
-devobox up --services-only # Sobe apenas o que é 'type: generic'
-
-# Ver status
-devobox status             # Lista todos os containers e estados
-```
-
-### 🔧 Comandos Avançados
-
-```bash
-# Shell com opções especiais
-devobox --auto-stop        # Para tudo ao sair (economiza recursos)
-devobox -d --auto-stop     # Com serviços + auto-stop
-
-# Reconstruir com opções
-devobox rebuild --skip-cleanup   # Reconstrói sem limpar cache
-```
-
-**⚡ Modo Auto-Stop:**
-
-O flag `--auto-stop` encerra **todos os containers** automaticamente quando você sai do shell. Ideal para economizar bateria e RAM em sessões rápidas.
-
-```bash
-$ devobox -d --auto-stop
-🚀 Iniciando todos os serviços...
-  🔌 Iniciando pg... ✓
-💖 Verificando healthchecks...
-  🩺 Aguardando pg ficar saudável... ✅ Saudável!
-🚀 Entrando no devobox...
-
-# [Você trabalha...]
-
-$ exit
-🧹 Encerrando todos os containers...
-✅ Containers encerrados
-```
-
-### 🎛️ Controle Granular: Bancos vs. Serviços
-
-O Devobox permite diferenciar entre **Bancos de Dados** (pesados, persistentes) e **Serviços Genéricos** (leves, auxiliares).
-
-#### Gerenciar Bancos (`type: database`)
-
-```bash
-devobox db start           # Inicia todos os bancos
-devobox db start pg        # Inicia apenas o Postgres
-devobox db stop            # Para todos os bancos
-devobox db restart         # Reinicia bancos
-devobox db status
-```
-
-#### Gerenciar Serviços Genéricos (`type: generic`)
-
-```bash
-devobox service start      # Inicia todos os serviços genéricos (ex: mailhog, redis-cache)
-devobox service start queue # Inicia apenas a fila
-devobox service stop       # Para serviços genéricos
-devobox service restart
-devobox service status
-```
-
-### 📁 Gerenciamento de Projetos (Novo em v0.5.0+)
-
-O Devobox agora suporta gerenciamento de projetos como **workspaces lógicos** dentro do container principal. Cada projeto pode ter seus próprios serviços e sessões isoladas do Zellij.
-
-#### Listar Projetos
-
-```bash
-devobox project list         # Lista todos os projetos em ~/code
-```
-
-#### Ativar Workspace de um Projeto (Dentro do Container)
-
-```bash
-# Dentro do container devobox
-devobox project up meu-app   # Ativa o projeto (inicia serviços + sessão Zellij)
-```
-
-O comando `project up` realiza:
-
-1.  Inicia os serviços específicos do projeto e de todos os `include_projects`.
-2.  Carrega variáveis de ambiente do projeto.
-3.  Cria/anexa uma sessão Zellij dedicada.
-4.  Muda para o diretório do projeto.
-5.  **NOVO:** Executa o `startup_command` do projeto principal e de todos os `include_projects` (cada um em uma aba separada do Zellij).
-
-#### Ver Informações do Contexto Atual
-
-```bash
-devobox project info         # Mostra contexto (Host/Container) e projeto atual
-```
-
-#### Estrutura de um Projeto
-
-Um projeto é um diretório em `~/code` com um arquivo `devobox.toml`:
-
-```bash
-~/code/meu-app/
-├── devobox.toml           # Configuração do projeto
-└── src/                   # Código do projeto
-```
-
-**Exemplo de `devobox.toml` de projeto:**
-
-```toml
-[project]
-env = ["NODE_ENV=development", "DEBUG=app:*"]
-shell = "zsh"
-startup_command = "npm start" # Ex: "cargo run", "yarn dev", "python app.py"
-
-[dependencies]
-```
-
-**Exemplo de `services.yml` de projeto:**
-
-```yaml
-
-```toml
-[services.app-postgres]
-type = "database"
-image = "postgres:16"
-ports = ["5433:5432"]
-env = [
-    "POSTGRES_PASSWORD=dev",
-    "POSTGRES_DB=myapp"
-]
-```
-services:
-  - name: app-postgres
-
-```bash
-# 1. Entre no devobox
 devobox
-
-# 2. Liste projetos disponíveis
-devobox project list
-
-# 3. Ative um projeto
-devobox project up meu-app
-
-# 4. Trabalhe normalmente (dentro do Zellij)
-# - Código em ~/code/meu-app
-# - Serviços rodando
-# - Env vars carregadas
-
-# 5. Saia do Zellij (Ctrl+O, D)
-# Volta ao shell principal do devobox
-
-# 6. Troque para outro projeto
-devobox project up outro-app
+mise install node@20 ruby@3.2 python@3.11
 ```
 
-**Nota:** Projetos NÃO são containers. Apenas os serviços satélites rodam em containers. O projeto é um workspace lógico dentro do container principal do Devobox.
+Tudo fica isolado. Seu sistema continua pristine.
 
-### 🧹 Limpeza de Recursos
+---
 
-O Devobox inclui comandos de limpeza para manter seu sistema enxuto:
+### ⚡ Trabalhar em Velocidade Nativa
 
 ```bash
-# Limpar tudo (containers parados, imagens não utilizadas, volumes órfãos e cache)
-devobox cleanup
-
-# Limpezas específicas
-devobox cleanup --containers
-devobox cleanup --images
-devobox cleanup --volumes
-devobox cleanup --build-cache
-
-# Opção nuclear (CUIDADO!)
-devobox cleanup --nuke  # Remove TUDO do Podman no sistema. Comece do zero.
+devobox
+cd ~/code/meu-projeto
+npm install  # Velocidade total do seu SSD
+npm run dev  # localhost:3000 — sem mapeamento de portas
 ```
 
-## 📁 Configuração e Estrutura
+Zero overhead de virtualização. É como desenvolvimento local, mas isolado.
 
-### Configuração Global vs. Local
+---
 
-O Devobox suporta uma configuração em cascata:
+### 🎯 Gerenciar Múltiplos Projetos
 
-1.  **Global (`~/.config/devobox/`):** Configuração padrão para seu "Pet Container".
-2.  **Local (`./devobox.toml`):** Configuração específica do projeto.
+```bash
+devobox project list           # Ver projetos em ~/code
+devobox project up frontend    # Ativar workspace do projeto
+```
 
-### Exemplo de `devobox.toml` Local
+Cada projeto tem:
 
-Use para declarar dependências de outros projetos:
+- Sessão Zellij dedicada
+- Serviços próprios
+- Variáveis de ambiente específicas
+
+---
+
+### 🏗️ Orquestrar Microsserviços
+
+Exemplo: Frontend Vue consumindo Backend Rails.
 
 ```toml
 # ~/code/frontend/devobox.toml
-
 [project]
-name = "meu-frontend"
+startup_command = "npm run dev"
 
 [dependencies]
-# O Devobox vai ler o services.yml desses caminhos e subir tudo junto!
+include_projects = ["../backend-api"]
+
+[services.frontend-cache]
+image = "redis:7"
+ports = ["6380:6379"]
+```
+
+```bash
+devobox project up frontend
+# ✓ Backend API sobe automaticamente
+# ✓ Redis cache inicia
+# ✓ Tudo em abas separadas no Zellij
+```
+
+---
+
+## 🛠️ Comandos Essenciais
+
+### Uso Diário
+
+```bash
+devobox              # Abre shell (auto-setup se necessário)
+devobox -d           # Abre shell COM todos os serviços
+devobox shell        # Shell sem auto-start de serviços
+```
+
+### Gerenciar Ambiente
+
+```bash
+devobox init         # Setup inicial completo
+devobox rebuild      # Reconstrói imagem e containers
+devobox status       # Ver status de todos containers
+```
+
+### Gerenciar Containers
+
+```bash
+devobox up           # Sobe tudo
+devobox down         # Para tudo
+devobox up --dbs-only       # Apenas bancos de dados
+devobox up --services-only  # Apenas serviços genéricos
+```
+
+### Controle Granular
+
+```bash
+# Bancos de dados (type: database)
+devobox db start     # Todos os bancos
+devobox db start pg  # Apenas Postgres
+devobox db stop
+
+# Serviços genéricos
+devobox service start
+devobox service stop
+```
+
+### Gerenciar Projetos
+
+```bash
+devobox project list       # Listar projetos em ~/code
+devobox project up myapp   # Ativar projeto
+devobox project info       # Ver contexto atual
+```
+
+### Limpeza
+
+```bash
+devobox cleanup            # Limpa recursos não usados
+devobox cleanup --nuke     # ⚠️ Reset completo do Podman
+```
+
+### Modo Auto-Stop
+
+Economize recursos parando containers automaticamente ao sair:
+
+```bash
+devobox -d --auto-stop
+# [trabalha...]
+exit
+# ✓ Todos containers param automaticamente
+```
+
+---
+
+## 📁 Configuração
+
+### Cascata: Global → Local → Projeto
+
+1. **Global:** `~/.config/devobox/devobox.toml` (defaults para todo o sistema)
+2. **Local:** `./devobox.toml` (overrides específicos do projeto)
+
+### Exemplo de Projeto
+
+```bash
+~/code/meu-app/
+├── devobox.toml
+└── src/
+```
+
+```toml
+# ~/code/meu-app/devobox.toml
+
+[project]
+env = ["NODE_ENV=development", "DEBUG=app:*"]
+shell = "zsh"
+startup_command = "npm start"
+
+[dependencies]
 include_projects = [
     "../backend-api",
     "../auth-service"
 ]
 
-[container]
-workdir = "/home/dev/code/frontend"
-```
-
-### Configuração de Serviços
-
-Agora suporta **Tipos** e **Healthchecks**:
-Serviços agora são definidos diretamente no `devobox.toml` usando seções `[services.NAME]`:
-
-```toml
-
-
-```yaml
-[services.pg]
-  # Banco de Dados (Controlado por 'devobox db')
-
+[services.app-db]
 type = "database"
-image = "docker.io/postgres:16"
+image = "postgres:16"
 ports = ["5432:5432"]
-env = ["POSTGRES_PASSWORD=dev"]
-
-healthcheck_command = "pg_isready -U dev"
+env = ["POSTGRES_PASSWORD=dev", "POSTGRES_DB=myapp"]
+healthcheck_command = "pg_isready -U postgres"
 healthcheck_interval = "5s"
 healthcheck_timeout = "3s"
 healthcheck_retries = 5
 
-  # Serviço Genérico (Controlado por 'devobox service')
-  # Se 'type' for omitido, é 'generic' por padrão
-
-[services.mailhog]
-    type: generic
-image = "docker.io/mailhog/mailhog:latest"
-ports = ["1025:1025", "8025:8025"]
+[services.app-cache]
+image = "redis:7"
+ports = ["6379:6379"]
 ```
+
+### Tipos de Serviço
+
+**Database (`type: database`):**
+
+- Infraestrutura persistente (Postgres, MySQL, MongoDB)
+- Controlado via `devobox db`
+- Geralmente mais pesado
+
+**Generic (padrão se `type` omitido):**
+
+- Serviços auxiliares (Redis, Mailhog, mocks)
+- Controlado via `devobox service`
+- Geralmente mais leve
+
+---
 
 ## 🔧 Stack Tecnológico
 
-### Container Base: Debian Bookworm
+**Container Base:** Debian Bookworm 12
 
-**Ferramentas:**
+**Ferramentas incluídas:**
 
-- `build-essential`, `git`, `curl`, `wget`, `openssh`, `vim`
+- Neovim 0.11.5, Lazygit, Zellij
+- Git, curl, wget, ssh, build-essential
+- [Mise](https://mise.jdx.dev/) - gerenciador de runtimes (Node, Ruby, Python, Rust, Go, etc.)
+- [Starship](https://starship.rs/) - prompt moderno
 
-**Gerenciador de Runtime:**
+**Integrações:**
 
-- **[Mise](https://mise.jdx.dev/)** - Gerencia versões de linguagens (Node, Rust, Python, etc) globalmente dentro do container.
+- SSH agent forwarding (Git just works™)
+- User namespace mapping (sem problemas de permissão)
+- Host networking (localhost é localhost)
 
-**IA Integration:**
+---
 
-- Ferramentas como `@anthropic-ai/claude-code` e `@google/gemini-cli` instaladas globalmente.
+## 📚 Documentação
 
-## 📚 Casos de Uso Avançados
+### Novo no Devobox?
 
-### Orquestração de Microsserviços ("App as a Service")
+➡️ **[Guia de Início Rápido](GETTING_STARTED.md)** - De zero a produtivo em 15 minutos
 
-O Devobox é um orquestrador poderoso para ambientes de microsserviços. Com a nova funcionalidade de `startup_command` em conjunto com `include_projects`, você pode fazer com que o Devobox suba não apenas a infraestrutura (bancos, filas) dos seus projetos dependentes, mas também suas **aplicações principais** (servidores, APIs) automaticamente, cada uma em uma aba separada do Zellij.
+### Quer entender conceitos?
 
-**Como funciona:**
+➡️ **[Guia Completo](docs/GUIDE.md)** - Workflows, comparações e tópicos avançados
 
-1.  **Configure o `startup_command`** em cada projeto (ex: `backend-api`, `auth-service`) no seu `devobox.toml`:
+### Precisa de exemplos práticos?
 
-    ```toml
-    # ~/code/backend-api/devobox.toml
-    [project]
-    name = "backend-api"
-    startup_command = "npm run dev" # ou "cargo run", "python app.py"
-    ```
+➡️ **[Cookbook](docs/COOKBOOK.md)** - Receitas copy-paste para cenários comuns
 
-2.  **Liste os projetos dependentes** no `devobox.toml` do seu projeto principal (ex: `my-frontend`):
+### Contribuindo ou curioso?
 
-    ```toml
-    # ~/code/my-frontend/devobox.toml
+➡️ **[Arquitetura](docs/ARCHITECTURE.md)** - Referência técnica completa
 
-    [project]
-    name = "my-frontend"
-    startup_command = "vite dev" # O comando para o seu frontend
+---
 
-    [dependencies]
-    include_projects = [
-        "../backend-api",
-        "../auth-service"
-    ]
-    ```
+## 🥊 Por que não...?
 
-3.  **Execute `devobox project up my-frontend`:**
-    O Devobox fará o seguinte:
-    - Iniciará os serviços (`services.yml`) de `my-frontend`, `backend-api` e `auth-service`.
-    - Criará uma sessão Zellij para `my-frontend`.
-    - Nessa sessão, abrirá abas separadas para:
-      - `my-frontend` (rodando `vite dev`)
-      - `backend-api` (rodando `npm run dev`)
-      - `auth-service` (rodando seu respectivo `startup_command`)
+### Docker Compose?
 
-Isso simplifica drasticamente o fluxo de trabalho de desenvolvimento em ambientes de microsserviços, permitindo que você suba todo o seu ecossistema com um único comando e tenha tudo organizado em uma única sessão Zellij.
+| Característica            | Docker Compose     | Devobox            |
+| ------------------------- | ------------------ | ------------------ |
+| **Permissões de arquivo** | 🔴 Root owns files | 🟢 Você é dono     |
+| **Setup por projeto**     | 🔴 N Dockerfiles   | 🟢 Config global   |
+| **Performance de rede**   | 🟡 Bridge NAT      | 🟢 Host network    |
+| **Ambiente**              | 🔴 Efêmero         | 🟢 Pet persistente |
+| **Healthchecks**          | 🟡 Passivos        | 🟢 Ativos          |
 
-[➡️ Leia o guia completo de Microsserviços](docs/microservices.md)
+[Leia a comparação completa](docs/GUIDE.md#parte-4-comparações-detalhadas)
 
-## 🐛 Troubleshooting
+### Desenvolvimento Local?
+
+**Vantagens:** Velocidade nativa, sem overhead
+**Desvantagem:** System updates quebram tudo
+
+Devobox dá velocidade nativa **E** isolamento.
+
+---
+
+## 🐛 Troubleshooting Rápido
 
 ### Container não inicia
 
@@ -469,18 +439,28 @@ podman logs devobox
 devobox rebuild
 ```
 
-### Permissões de arquivo
-
-O Devobox usa `--userns=keep-id` para mapear seu UID do host, evitando problemas de `permission denied` em arquivos criados dentro do container.
-
-### Performance lenta de I/O
-
-Se usar Btrfs/ZFS, desabilite Copy-on-Write para o diretório do Podman:
+### Performance lenta de I/O (Btrfs/ZFS)
 
 ```bash
 sudo chattr +C ~/.local/share/containers/storage
 ```
 
+### Permissões de arquivo
+
+Devobox usa `--userns=keep-id` para mapear seu UID. Arquivos criados no container pertencem a você no host. Se tiver problemas, verifique se Podman está configurado corretamente para user namespaces.
+
+---
+
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas! Abra issues para bugs ou sugestões, e PRs para melhorias.
+
+**Licença:** MIT
+
+**Repositório:** https://github.com/JohnAnon9771/devobox
+
 ---
 
 **Desenvolvido para profissionais que valorizam controle, performance e higiene do sistema.**
+
+> _"Pare de lutar contra seu sistema. Comece a construir."_
