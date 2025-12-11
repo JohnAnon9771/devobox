@@ -407,26 +407,149 @@ ports = ["6379:6379"]
 
 ---
 
-## 🥊 Por que não...?
+## 🥊 Devobox vs Docker Compose
 
-### Docker Compose?
+### O que Devobox faz que Docker Compose NÃO faz?
 
-| Característica            | Docker Compose     | Devobox            |
-| ------------------------- | ------------------ | ------------------ |
-| **Permissões de arquivo** | 🔴 Root owns files | 🟢 Você é dono     |
-| **Setup por projeto**     | 🔴 N Dockerfiles   | 🟢 Config global   |
-| **Performance de rede**   | 🟡 Bridge NAT      | 🟢 Host network    |
-| **Ambiente**              | 🔴 Efêmero         | 🟢 Pet persistente |
-| **Healthchecks**          | 🟡 Passivos        | 🟢 Ativos          |
+#### 1. 🔗 **Cascata de Dependências entre Projetos**
 
-[Leia a comparação completa](docs/GUIDE.md#parte-4-comparações-detalhadas)
+**Docker Compose:**
+```bash
+# Precisa rodar manualmente cada projeto
+cd ~/frontend && docker-compose up -d
+cd ~/backend && docker-compose up -d
+cd ~/auth && docker-compose up -d
+```
 
-### Desenvolvimento Local?
+**Devobox:**
+```bash
+# Um comando sobe tudo automaticamente
+devobox project up frontend
+# ✓ Frontend sobe
+# ✓ Backend sobe (dependência automática)
+# ✓ Auth sobe (dependência automática)
+```
 
-**Vantagens:** Velocidade nativa, sem overhead
-**Desvantagem:** System updates quebram tudo
+---
 
-Devobox dá velocidade nativa **E** isolamento.
+#### 2. 🎯 **Workspace Multi-Projeto com Terminal Integrado**
+
+**Docker Compose:**
+- Sobe containers
+- Você gerencia terminais manualmente
+- Sem organização de abas/sessões
+
+**Devobox:**
+```bash
+devobox project up frontend
+```
+**Resultado:** Zellij com abas organizadas:
+- **Aba 1:** Frontend (`npm run dev` rodando)
+- **Aba 2:** Backend (`rails server` rodando)
+- **Aba 3:** Auth (`node server.js` rodando)
+
+Tudo em **uma sessão**, tudo **persistente**.
+
+---
+
+#### 3. ⏱️ **Healthcheck Ativo (CLI Espera Antes de Liberar)**
+
+**Docker Compose:**
+```bash
+docker-compose up -d
+# Retorna imediatamente
+# Você tenta acessar: "Connection refused" ❌
+# Precisa de wait-for-it.sh ou checar manualmente
+```
+
+**Devobox:**
+```bash
+devobox -d
+# 🚀 Iniciando pg...
+# 🩺 Aguardando pg... ✅ Saudável!
+# Só libera shell quando REALMENTE pronto
+```
+
+---
+
+#### 4. 🏷️ **Separação Semântica: Bancos vs Serviços**
+
+**Docker Compose:**
+```bash
+# Sem separação. Você lista manualmente:
+docker-compose up postgres redis mailhog
+```
+
+**Devobox:**
+```bash
+devobox db start        # Apenas Postgres, MySQL, MongoDB
+devobox service start   # Apenas Redis, Mailhog, auxiliares
+devobox up --dbs-only   # Controle granular
+```
+
+---
+
+#### 5. 🔍 **Auto-Discovery de Projetos**
+
+**Docker Compose:**
+- Você precisa saber onde está cada `docker-compose.yml`
+
+**Devobox:**
+```bash
+devobox project list
+# Escaneia ~/code automaticamente
+# Lista todos os projetos com devobox.toml
+```
+
+---
+
+#### 6. 🎭 **Hub & Spoke Pattern (Container Singleton)**
+
+**Docker Compose:**
+- Todo `docker-compose up` cria novos containers
+- Estado não persiste entre sessões
+
+**Devobox:**
+- 1 Hub reutilizado (singleton)
+- Shell injection (`podman exec`) em vez de recriar
+- Estado preservado (histórico, ferramentas instaladas)
+
+---
+
+### Tabela Comparativa
+
+| Feature | Docker Compose | Devobox |
+|---------|----------------|---------|
+| **Cascata de dependências** | ❌ Manual | ✅ `include_projects` automático |
+| **Terminal multi-projeto** | ❌ Você gerencia | ✅ Zellij integrado |
+| **Startup orchestration** | 🟡 command básico | ✅ Abas + startup_command |
+| **Healthcheck wait** | ❌ Não bloqueia | ✅ Espera ativamente |
+| **Agrupamento semântico** | ❌ Lista flat | ✅ db vs service |
+| **Project discovery** | ❌ Manual | ✅ Auto-scan |
+| **Hub singleton** | ❌ Recria sempre | ✅ Reusa container |
+| **User namespace (padrão)** | 🟡 `user: "1000:1000"` | ✅ Automático |
+| **Host network (padrão)** | 🟡 `network_mode: host` | ✅ Automático |
+| **Flexibilidade total** | ✅ Configure tudo | 🟡 Opinionated |
+| **Multi-plataforma** | ✅ Linux/Mac/Windows | 🔴 Linux only |
+
+---
+
+### Quando usar cada um?
+
+**Use Docker Compose se você precisa:**
+- ✅ Rodar em Mac/Windows
+- ✅ Máxima flexibilidade
+- ✅ Paridade com produção
+- ✅ Ecossistema universal
+
+**Use Devobox se você quer:**
+- ✅ Linux nativo
+- ✅ Múltiplos projetos interdependentes
+- ✅ Terminal multiplexado integrado
+- ✅ Zero-config, convenção sobre configuração
+- ✅ Workflow "pet container"
+
+[Leia a comparação completa com exemplos](docs/GUIDE.md#parte-4-comparações-detalhadas)
 
 ---
 
