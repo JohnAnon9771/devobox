@@ -446,6 +446,7 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
 
     let mut container_env = final_config.env.clone();
     container_env.push("DEVOBOX_CONTAINER=1".to_string());
+    container_env.push("XDG_RUNTIME_DIR=/tmp".to_string());
 
     let extra_args_refs: Vec<&str> = all_extra_args.iter().map(|s| s.as_str()).collect();
 
