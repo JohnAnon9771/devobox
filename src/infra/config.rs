@@ -328,7 +328,7 @@ pub fn load_app_config(config_dir: &Path) -> Result<AppConfig> {
 
 /// Resolves services for a specific project
 ///
-/// Loads the project's own services.yml and any services from project dependencies.
+/// Loads the project's own services in the devobox.toml and any services from project dependencies.
 /// This function is used when activating a project workspace to determine which
 /// services need to be started.
 ///

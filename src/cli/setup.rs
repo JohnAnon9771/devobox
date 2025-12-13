@@ -10,7 +10,7 @@ pub fn install(config_dir: &Path) -> Result<()> {
     install_default_config(config_dir)?;
 
     info!(
-        " Config pronto. Ajuste databases.yml conforme necessário (padrão: {:?})",
+        " Config pronto. Ajuste devobox.toml conforme necessário (padrão: {:?})",
         default_config_dir()
     );
 

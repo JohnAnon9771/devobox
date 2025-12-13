@@ -208,7 +208,6 @@ env = ["NODE_ENV=development", "DEBUG=app:*"]
 shell = "zsh"
 
 [dependencies]
-services_yml = "services.yml"
 include_projects = ["../other-project"]
 "#;
         fs::write(project_dir.join("devobox.toml"), config_content).unwrap();
