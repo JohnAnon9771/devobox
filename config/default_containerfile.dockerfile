@@ -35,8 +35,10 @@ RUN curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/d
 # install zellij
 RUN curl -Lo zellij.tar.gz "https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz" && \
     tar -xf zellij.tar.gz && \
+    chmod +x zellij && \
     install zellij -D -t /usr/local/bin/ && \
-    rm zellij.tar.gz zellij
+    rm zellij.tar.gz zellij && \
+    zellij --version
 
 # install devobox (enables devobox-in-devobox)
 RUN curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 -o /usr/local/bin/devobox && \
@@ -50,12 +52,12 @@ RUN groupadd --gid $USER_GID $USERNAME \
 USER $USERNAME
 WORKDIR /home/$USERNAME
 
-# Install Starship
-RUN curl -sS https://starship.rs/install.sh | sh -s -- -y
-
 # Install Mise
 RUN curl https://mise.jdx.dev/install.sh | sh
 ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
+
+# Install Starship
+RUN curl -sS https://starship.rs/install.sh | sh -s -- -y -b "/home/${USERNAME}/.local/bin"
 
 RUN mkdir -p /home/${USERNAME}/.local/state/bash
 ENV HISTFILE=/home/${USERNAME}/.local/state/bash/history

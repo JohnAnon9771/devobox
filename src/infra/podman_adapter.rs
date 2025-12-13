@@ -183,16 +183,27 @@ impl ContainerRuntime for PodmanAdapter {
     }
 
     fn build_image(&self, tag: &str, containerfile: &Path, context_dir: &Path) -> Result<()> {
+        let mut args: Vec<std::ffi::OsString> = vec![
+            "build".into(),
+            "--progress=plain".into(),
+            "-t".into(),
+            tag.into(),
+            "-f".into(),
+            containerfile.as_os_str().into(),
+        ];
+
+        if let Some((uid, gid)) = get_current_user_id() {
+            debug!("Usando UID={} GID={} para build", uid, gid);
+            args.push("--build-arg".into());
+            args.push(format!("USER_UID={}", uid).into());
+            args.push("--build-arg".into());
+            args.push(format!("USER_GID={}", gid).into());
+        }
+
+        args.push(context_dir.as_os_str().into());
+
         podman(
-            [
-                OsStr::new("build"),
-                OsStr::new("--progress=plain"),
-                OsStr::new("-t"),
-                OsStr::new(tag),
-                OsStr::new("-f"),
-                containerfile.as_os_str(),
-                context_dir.as_os_str(),
-            ],
+            args,
             &format!("construindo imagem {tag} a partir de {:?}", containerfile),
             false, // Mostrar output do build
         )
@@ -369,4 +380,18 @@ where
             error_msg.trim()
         );
     }
+}
+
+fn get_current_user_id() -> Option<(String, String)> {
+    let uid = Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())?;
+    let gid = Command::new("id")
+        .arg("-g")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())?;
+    Some((uid, gid))
 }
