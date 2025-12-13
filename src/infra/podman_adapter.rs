@@ -186,6 +186,7 @@ impl ContainerRuntime for PodmanAdapter {
         podman(
             [
                 OsStr::new("build"),
+                OsStr::new("--progress=plain"),
                 OsStr::new("-t"),
                 OsStr::new(tag),
                 OsStr::new("-f"),

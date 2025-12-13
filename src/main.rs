@@ -41,6 +41,7 @@ enum Commands {
         skip_cleanup: bool,
     },
     /// Instala apenas os arquivos de configuração (sem build)
+    #[command(alias = "setup")]
     Install,
     /// Constrói a imagem e cria containers
     Build {

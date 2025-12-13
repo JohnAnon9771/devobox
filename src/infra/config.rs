@@ -24,7 +24,6 @@ pub fn ensure_config_dir(config_dir: &Path) -> Result<()> {
 }
 
 pub const DEFAULT_DEVOBOX_TOML_NAME: &str = "devobox.toml";
-pub const DEFAULT_CONTAINERFILE_NAME: &str = "default_containerfile.dockerfile";
 pub const MISE_TOML: &str = include_str!("../../config/mise.toml");
 pub const STARSHIP_TOML: &str = include_str!("../../config/starship.toml");
 
@@ -237,7 +236,7 @@ pub fn install_default_config(target_dir: &Path) -> Result<()> {
 
     let files = [
         (
-            DEFAULT_CONTAINERFILE_NAME,
+            "Containerfile",
             include_str!("../../config/default_containerfile.dockerfile"),
         ),
         ("mise.toml", MISE_TOML),
@@ -552,7 +551,7 @@ ports = ["5432:5432"]
         install_default_config(&target_dir).unwrap();
 
         assert!(target_dir.join("mise.toml").exists());
-        assert!(target_dir.join(DEFAULT_CONTAINERFILE_NAME).exists());
+        assert!(target_dir.join("Containerfile").exists());
 
         // Verify that devobox.toml has services
         let devobox_toml_path = target_dir.join(DEFAULT_DEVOBOX_TOML_NAME);
