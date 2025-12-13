@@ -185,8 +185,14 @@ impl ContainerRuntime for MockRuntime {
         Ok(())
     }
 
-    fn exec_shell(&self, container: &str, _workdir: Option<&Path>) -> Result<()> {
-        self.record_command(&format!("exec_shell:{}", container));
+    fn exec_shell(
+        &self,
+        container: &str,
+        _workdir: Option<&Path>,
+        session_name: Option<&str>,
+    ) -> Result<()> {
+        let session = session_name.unwrap_or("default");
+        self.record_command(&format!("exec_shell:{}:{}", container, session));
         self.check_fail("exec_shell")?;
         Ok(())
     }

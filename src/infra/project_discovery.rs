@@ -53,18 +53,23 @@ impl ProjectDiscovery {
                 continue;
             }
 
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown")
-                .to_string();
+            let config_path = path.join("devobox.toml");
+            if !config_path.exists() {
+                debug!("Ignorando {:?} - não possui devobox.toml", path.file_name());
+                continue;
+            }
 
             match self.load_project_config(&config_path) {
                 Ok(config) => {
-                    debug!("Projeto encontrado: {}", name);
-                    projects.push(Project::new(name, path, config));
+                    let project = Project::new(path, config);
+                    debug!("Projeto encontrado: {}", project.name);
+                    projects.push(project);
                 }
                 Err(e) => {
+                    let name = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown");
                     debug!("Erro ao carregar projeto {}: {}", name, e);
                     // Continue descobrindo outros projetos mesmo se um falhar
                 }
@@ -89,7 +94,7 @@ impl ProjectDiscovery {
     }
 
     /// Loads project configuration from a devobox.toml file
-    fn load_project_config(&self, path: &Path) -> Result<ProjectConfig> {
+    pub fn load_project_config(&self, path: &Path) -> Result<ProjectConfig> {
         let content = fs::read_to_string(path)
             .with_context(|| format!("Lendo configuração do projeto: {:?}", path))?;
 

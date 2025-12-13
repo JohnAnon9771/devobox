@@ -147,7 +147,12 @@ impl ContainerRuntime for PodmanAdapter {
         Ok(())
     }
 
-    fn exec_shell(&self, container: &str, workdir: Option<&Path>) -> Result<()> {
+    fn exec_shell(
+        &self,
+        container: &str,
+        workdir: Option<&Path>,
+        session_name: Option<&str>,
+    ) -> Result<()> {
         let mut cmd = Command::new("podman");
         cmd.args(["exec", "-it"]);
 
@@ -155,8 +160,11 @@ impl ContainerRuntime for PodmanAdapter {
             cmd.args(["-w", dir.to_string_lossy().as_ref()]);
         }
 
+        // Use provided session name or fallback to a default generic name
+        let zellij_session = session_name.unwrap_or("devobox-default");
+
         cmd.arg(container)
-            .args(["zellij", "attach", "--create", "devobox"]);
+            .args(["zellij", "attach", "--create", zellij_session]);
 
         let status = cmd
             .status()

@@ -34,6 +34,10 @@ pub struct ProjectConfig {
 /// Project-specific settings
 #[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
 pub struct ProjectSettings {
+    /// Explicit project name (overrides directory name)
+    #[serde(default)]
+    pub name: Option<String>,
+
     /// Environment variables to set
     #[serde(default)]
     pub env: Vec<String>,
@@ -55,7 +59,20 @@ pub struct ProjectDependencies {
 }
 
 impl Project {
-    pub fn new(name: String, path: PathBuf, config: ProjectConfig) -> Self {
+    /// Creates a new Project instance
+    /// Resolves the name automatically: Config > Directory Name > "unknown"
+    pub fn new(path: PathBuf, config: ProjectConfig) -> Self {
+        let name = config
+            .project
+            .as_ref()
+            .and_then(|p| p.name.clone())
+            .or_else(|| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.to_string())
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+
         Self { name, path, config }
     }
 
@@ -97,11 +114,25 @@ mod tests {
     #[test]
     fn test_session_name_generation() {
         let project = Project::new(
-            "my-app".into(),
             PathBuf::from("/home/dev/code/my-app"),
             ProjectConfig::default(),
         );
+        assert_eq!(project.name, "my-app");
         assert_eq!(project.session_name(), "devobox-my-app");
+    }
+
+    #[test]
+    fn test_project_name_from_config_override() {
+        let config = ProjectConfig {
+            project: Some(ProjectSettings {
+                name: Some("custom-name".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let project = Project::new(PathBuf::from("/home/dev/code/my-app"), config);
+        assert_eq!(project.name, "custom-name");
+        assert_eq!(project.session_name(), "devobox-custom-name");
     }
 
     #[test]
@@ -113,11 +144,7 @@ mod tests {
 
     #[test]
     fn test_env_vars_empty_when_no_config() {
-        let project = Project::new(
-            "test".into(),
-            PathBuf::from("/test"),
-            ProjectConfig::default(),
-        );
+        let project = Project::new(PathBuf::from("/test"), ProjectConfig::default());
         assert!(project.env_vars().is_empty());
     }
 
@@ -128,11 +155,12 @@ mod tests {
                 env: vec!["NODE_ENV=development".into(), "DEBUG=app:*".into()],
                 shell: None,
                 startup_command: None,
+                name: None,
             }),
             ..Default::default()
         };
 
-        let project = Project::new("test".into(), PathBuf::from("/test"), config);
+        let project = Project::new(PathBuf::from("/test"), config);
         assert_eq!(project.env_vars().len(), 2);
         assert_eq!(project.env_vars()[0], "NODE_ENV=development");
     }

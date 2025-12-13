@@ -193,11 +193,65 @@ impl Runtime {
             " Entrando no {} (workdir {:?})",
             main_container_name, workdir_in_container
         );
-        let result = self
-            .container_service
-            .exec_shell(main_container_name, workdir_in_container.as_deref());
 
-        // Stop all containers on exit if auto_stop is enabled
+        // Check if we are inside a project (devobox.toml exists in current dir)
+        let pwd = std::env::current_dir()?;
+        let devobox_toml = pwd.join("devobox.toml");
+
+        let home = std::env::var("HOME").unwrap_or_default();
+        let code_dir = PathBuf::from(&home).join("code");
+
+        if devobox_toml.exists() {
+            let discovery = ProjectDiscovery::new(None)?;
+            match discovery.load_project_config(&devobox_toml) {
+                Ok(config) => {
+                    let project = crate::domain::Project::new(pwd.clone(), config);
+                    info!(" Detectado projeto: {}", project.name);
+
+                    let cmd = vec!["devobox", "project", "up", &project.name];
+
+                    let status = std::process::Command::new("podman")
+                        .args(["exec", "-it"])
+                        .arg(main_container_name)
+                        .args(cmd)
+                        .status()
+                        .context("Falha ao executar devobox project up via podman")?;
+
+                    if !status.success() {
+                        bail!("Falha ao iniciar projeto via devobox project up inside container");
+                    }
+
+                    if auto_stop {
+                        self.stop_all_containers()?;
+                    }
+                    return Ok(());
+                }
+                Err(e) => {
+                    warn!("Encontrado devobox.toml mas falha ao carregar: {}", e);
+                    warn!("Usando shell padrão...");
+                }
+            }
+        }
+
+        let session_name = if let Ok(stripped) = pwd.strip_prefix(&code_dir) {
+            if let Some(project_name) = stripped.components().next() {
+                // Inside ~/code/project_name but no devobox.toml found
+                format!("devobox-{}", project_name.as_os_str().to_string_lossy())
+            } else {
+                // Inside ~/code root
+                "devobox-code-root".to_string()
+            }
+        } else {
+            // Outside ~/code
+            "devobox-default".to_string()
+        };
+
+        let result = self.container_service.exec_shell(
+            main_container_name,
+            workdir_in_container.as_deref(),
+            Some(&session_name),
+        );
+
         if auto_stop {
             self.stop_all_containers()?;
         }

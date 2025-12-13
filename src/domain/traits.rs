@@ -32,8 +32,13 @@ pub trait ContainerRuntime: Send + Sync + Debug {
     /// Remove a container
     fn remove_container(&self, name: &str) -> Result<()>;
 
-    /// Execute a shell in a container
-    fn exec_shell(&self, container: &str, workdir: Option<&Path>) -> Result<()>;
+    /// Execute a shell in a container with an optional session name
+    fn exec_shell(
+        &self,
+        container: &str,
+        workdir: Option<&Path>,
+        session_name: Option<&str>,
+    ) -> Result<()>;
 
     /// Check if a command is available
     fn is_command_available(&self, cmd: &str) -> bool;

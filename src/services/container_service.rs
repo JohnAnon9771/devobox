@@ -73,8 +73,13 @@ impl ContainerService {
         self.runtime.create_container(spec)
     }
 
-    pub fn exec_shell(&self, container: &str, workdir: Option<&Path>) -> Result<()> {
-        self.runtime.exec_shell(container, workdir)
+    pub fn exec_shell(
+        &self,
+        container: &str,
+        workdir: Option<&Path>,
+        session_name: Option<&str>,
+    ) -> Result<()> {
+        self.runtime.exec_shell(container, workdir, session_name)
     }
 
     pub fn is_command_available(&self, cmd: &str) -> bool {
