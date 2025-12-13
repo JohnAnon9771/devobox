@@ -108,19 +108,19 @@ impl ContainerRuntime for PodmanAdapter {
         }
 
         if let Some(hc_cmd) = spec.healthcheck_command {
-            args.push("--healthcheck-cmd".into());
+            args.push("--health-cmd".into());
             args.push(hc_cmd.into());
         }
         if let Some(hc_interval) = spec.healthcheck_interval {
-            args.push("--healthcheck-interval".into());
+            args.push("--health-interval".into());
             args.push(hc_interval.into());
         }
         if let Some(hc_timeout) = spec.healthcheck_timeout {
-            args.push("--healthcheck-timeout".into());
+            args.push("--health-timeout".into());
             args.push(hc_timeout.into());
         }
         if let Some(hc_retries) = spec.healthcheck_retries {
-            args.push("--healthcheck-retries".into());
+            args.push("--health-retries".into());
             args.push(hc_retries.to_string());
         }
 
