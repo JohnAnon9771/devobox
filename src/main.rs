@@ -115,6 +115,9 @@ enum Commands {
         /// Limpar tudo (padrão se nenhuma flag especificada)
         #[arg(long)]
         all: bool,
+        /// EXTREMAMENTE DESTRUTIVO: Reset completo do Podman (deleta TUDO incluindo containers rodando)
+        #[arg(long, conflicts_with_all = ["containers", "images", "volumes", "build_cache", "nuke", "all"])]
+        reset: bool,
     },
     /// Gerenciamento de projetos
     Project {
@@ -276,7 +279,12 @@ fn main() -> Result<()> {
             build_cache,
             nuke,
             all,
+            reset,
         }) => {
+            if reset {
+                return cli::runtime::reset(&cli.config_dir);
+            }
+
             if nuke {
                 return cli::runtime::nuke(&cli.config_dir);
             }

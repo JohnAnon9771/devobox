@@ -37,6 +37,10 @@ impl SystemService {
     pub fn nuke_system(&self) -> Result<()> {
         self.runtime.nuke_system()
     }
+
+    pub fn reset_system(&self) -> Result<()> {
+        self.runtime.reset_system()
+    }
 }
 
 #[cfg(test)]

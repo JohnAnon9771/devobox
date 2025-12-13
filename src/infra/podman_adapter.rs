@@ -238,6 +238,27 @@ impl ContainerRuntime for PodmanAdapter {
 
         Ok(())
     }
+
+    fn reset_system(&self) -> Result<()> {
+        warn!("  ATENÇÃO: System reset irá DELETAR TUDO!");
+        warn!("   - Todos containers (rodando ou parados)");
+        warn!("   - Todas imagens");
+        warn!("   - Todos volumes (incluindo dados persistentes)");
+        warn!("   - Reset completo do storage do Podman");
+        info!("");
+        info!(" Executando system reset...");
+
+        podman(
+            ["system", "reset", "-f"],
+            "resetando sistema Podman completamente",
+            false,
+        )?;
+
+        info!(" System reset concluído!");
+        info!("   O Podman foi resetado ao estado de fábrica.");
+
+        Ok(())
+    }
 }
 
 fn get_container_state(name: &str) -> Result<ContainerState> {

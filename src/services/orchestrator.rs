@@ -233,6 +233,11 @@ impl Orchestrator {
     pub fn nuke_system(&self) -> Result<()> {
         self.system_service.nuke_system()
     }
+
+    /// Performs a complete Podman system reset (MOST DESTRUCTIVE)
+    pub fn reset_system(&self) -> Result<()> {
+        self.system_service.reset_system()
+    }
 }
 
 fn parse_duration(s: &str) -> Result<Duration> {

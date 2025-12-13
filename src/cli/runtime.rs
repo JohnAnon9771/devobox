@@ -233,6 +233,10 @@ impl Runtime {
         self.orchestrator.nuke_system()
     }
 
+    pub fn reset(&self) -> Result<()> {
+        self.orchestrator.reset_system()
+    }
+
     pub fn ensure_svc_created(&self, svc: &Service) -> Result<()> {
         let status = self.container_service.get_status(&svc.name)?;
 
@@ -449,6 +453,28 @@ pub fn cleanup(config_dir: &Path, options: &CleanupOptions) -> Result<()> {
 pub fn nuke(config_dir: &Path) -> Result<()> {
     let runtime = Runtime::new(config_dir)?;
     runtime.nuke()
+}
+
+pub fn reset(config_dir: &Path) -> Result<()> {
+    warn!(" System reset irá DELETAR TUDO do Podman!");
+    warn!("   Esta ação é IRREVERSÍVEL!");
+    info!("");
+    info!(" Digite 'RESET' para confirmar:");
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+
+    if input.trim() != "RESET" {
+        info!(" Reset cancelado.");
+        return Ok(());
+    }
+
+    let runtime = Runtime::new(config_dir)?;
+    runtime.reset()?;
+
+    info!("");
+    warn!("  Você precisará rodar 'devobox init' novamente.");
+    Ok(())
 }
 
 /// Lists all available projects

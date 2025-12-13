@@ -231,4 +231,10 @@ impl ContainerRuntime for MockRuntime {
         self.check_fail("nuke_system")?;
         Ok(())
     }
+
+    fn reset_system(&self) -> Result<()> {
+        self.record_command("reset_system");
+        self.check_fail("reset_system")?;
+        Ok(())
+    }
 }

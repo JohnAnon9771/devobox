@@ -55,4 +55,7 @@ pub trait ContainerRuntime: Send + Sync + Debug {
 
     /// Perform an aggressive system cleanup (Nuke)
     fn nuke_system(&self) -> Result<()>;
+
+    /// Reset Podman system completely (MOST DESTRUCTIVE)
+    fn reset_system(&self) -> Result<()>;
 }
