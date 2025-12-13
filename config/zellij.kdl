@@ -19,11 +19,3 @@ themes {
         orange "#ce412b" // Rust Orange (Matches Starship Rust)
     }
 }
-
-// UI Configuration
-ui {
-    pane_frames {
-        rounded_corners true
-        hide_session_name true
-    }
-}
