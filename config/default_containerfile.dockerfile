@@ -40,9 +40,6 @@ RUN curl -Lo zellij.tar.gz "https://github.com/zellij-org/zellij/releases/latest
     rm zellij.tar.gz zellij && \
     zellij --version
 
-# install devobox (enables devobox-in-devobox)
-RUN curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 -o /usr/local/bin/devobox && \
-    chmod +x /usr/local/bin/devobox
 
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME \
@@ -75,6 +72,10 @@ COPY --chown=$USER_UID:$USER_GID mise.toml /home/$USERNAME/.config/mise/config.t
 COPY --chown=$USER_UID:$USER_GID starship.toml /home/$USERNAME/.config/starship.toml
 ENV STARSHIP_CONFIG=/home/$USERNAME/.config/starship.toml
 
+# Configure Zellij
+RUN mkdir -p /home/$USERNAME/.config/zellij
+COPY --chown=$USER_UID:$USER_GID zellij.kdl /home/$USERNAME/.config/zellij/config.kdl
+
 RUN --mount=type=cache,target=/home/dev/.cache/mise,uid=$USER_UID,gid=$USER_GID \
     mise install
 
@@ -82,5 +83,12 @@ RUN --mount=type=cache,target=/home/$USERNAME/.npm,uid=$USER_UID,gid=$USER_GID \
     mise use -g npm:@anthropic-ai/claude-code && \
     mise use -g npm:@openai/codex && \
     mise use -g npm:@google/gemini-cli
+
+# install devobox (enables devobox-in-devobox)
+RUN curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/x86_64-unknown-linux-gnu.tar.gz -o /tmp/devobox.tar.gz && \
+    tar -xzf /tmp/devobox.tar.gz -C /tmp && \
+    mv /tmp/devobox /usr/local/bin/devobox && \
+    chmod +x /usr/local/bin/devobox && \
+    rm /tmp/devobox.tar.gz
 
 CMD ["/bin/bash"]

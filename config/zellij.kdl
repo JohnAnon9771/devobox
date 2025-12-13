@@ -1,0 +1,29 @@
+// Zellij Configuration for Devobox
+// Matches Starship colors (Arch Blue + Rust Orange aesthetic)
+
+theme "devobox-theme"
+default_shell "bash"
+
+themes {
+    devobox-theme {
+        fg "#D9E0EE"
+        bg "#1E1E2E"
+        black "#181825"
+        red "#F38BA8"
+        green "#A6E3A1"
+        yellow "#F9E2AF"
+        blue "#1793d1" // Arch Blue (Matches Starship prompt)
+        magenta "#F5C2E7"
+        cyan "#89DCEB"
+        white "#D9E0EE"
+        orange "#ce412b" // Rust Orange (Matches Starship Rust)
+    }
+}
+
+// UI Configuration
+ui {
+    pane_frames {
+        rounded_corners true
+        hide_session_name true
+    }
+}
