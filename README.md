@@ -373,7 +373,7 @@ ports = ["6379:6379"]
 
 ## 🔧 Stack Tecnológico
 
-**Container Base:** Debian Bookworm 12
+**Container Base:** Debian Trixie
 
 **Ferramentas incluídas:**
 
@@ -417,6 +417,7 @@ ports = ["6379:6379"]
 #### 1. 🔗 **Cascata de Dependências entre Projetos**
 
 **Docker Compose:**
+
 ```bash
 # Precisa rodar manualmente cada projeto
 cd ~/frontend && docker-compose up -d
@@ -425,6 +426,7 @@ cd ~/auth && docker-compose up -d
 ```
 
 **Devobox:**
+
 ```bash
 # Um comando sobe tudo automaticamente
 devobox project up frontend
@@ -438,15 +440,19 @@ devobox project up frontend
 #### 2. 🎯 **Workspace Multi-Projeto com Terminal Integrado**
 
 **Docker Compose:**
+
 - Sobe containers
 - Você gerencia terminais manualmente
 - Sem organização de abas/sessões
 
 **Devobox:**
+
 ```bash
 devobox project up frontend
 ```
+
 **Resultado:** Zellij com abas organizadas:
+
 - **Aba 1:** Frontend (`npm run dev` rodando)
 - **Aba 2:** Backend (`rails server` rodando)
 - **Aba 3:** Auth (`node server.js` rodando)
@@ -458,6 +464,7 @@ Tudo em **uma sessão**, tudo **persistente**.
 #### 3. ⏱️ **Healthcheck Ativo (CLI Espera Antes de Liberar)**
 
 **Docker Compose:**
+
 ```bash
 docker-compose up -d
 # Retorna imediatamente
@@ -466,6 +473,7 @@ docker-compose up -d
 ```
 
 **Devobox:**
+
 ```bash
 devobox -d
 # 🚀 Iniciando pg...
@@ -478,12 +486,14 @@ devobox -d
 #### 4. 🏷️ **Separação Semântica: Bancos vs Serviços**
 
 **Docker Compose:**
+
 ```bash
 # Sem separação. Você lista manualmente:
 docker-compose up postgres redis mailhog
 ```
 
 **Devobox:**
+
 ```bash
 devobox db start        # Apenas Postgres, MySQL, MongoDB
 devobox service start   # Apenas Redis, Mailhog, auxiliares
@@ -495,9 +505,11 @@ devobox up --dbs-only   # Controle granular
 #### 5. 🔍 **Auto-Discovery de Projetos**
 
 **Docker Compose:**
+
 - Você precisa saber onde está cada `docker-compose.yml`
 
 **Devobox:**
+
 ```bash
 devobox project list
 # Escaneia ~/code automaticamente
@@ -509,10 +521,12 @@ devobox project list
 #### 6. 🎭 **Hub & Spoke Pattern (Container Singleton)**
 
 **Docker Compose:**
+
 - Todo `docker-compose up` cria novos containers
 - Estado não persiste entre sessões
 
 **Devobox:**
+
 - 1 Hub reutilizado (singleton)
 - Shell injection (`podman exec`) em vez de recriar
 - Estado preservado (histórico, ferramentas instaladas)
@@ -521,31 +535,33 @@ devobox project list
 
 ### Tabela Comparativa
 
-| Feature | Docker Compose | Devobox |
-|---------|----------------|---------|
-| **Cascata de dependências** | ❌ Manual | ✅ `include_projects` automático |
-| **Terminal multi-projeto** | ❌ Você gerencia | ✅ Zellij integrado |
-| **Startup orchestration** | 🟡 command básico | ✅ Abas + startup_command |
-| **Healthcheck wait** | ❌ Não bloqueia | ✅ Espera ativamente |
-| **Agrupamento semântico** | ❌ Lista flat | ✅ db vs service |
-| **Project discovery** | ❌ Manual | ✅ Auto-scan |
-| **Hub singleton** | ❌ Recria sempre | ✅ Reusa container |
-| **User namespace (padrão)** | 🟡 `user: "1000:1000"` | ✅ Automático |
-| **Host network (padrão)** | 🟡 `network_mode: host` | ✅ Automático |
-| **Flexibilidade total** | ✅ Configure tudo | 🟡 Opinionated |
-| **Multi-plataforma** | ✅ Linux/Mac/Windows | 🔴 Linux only |
+| Feature                     | Docker Compose          | Devobox                          |
+| --------------------------- | ----------------------- | -------------------------------- |
+| **Cascata de dependências** | ❌ Manual               | ✅ `include_projects` automático |
+| **Terminal multi-projeto**  | ❌ Você gerencia        | ✅ Zellij integrado              |
+| **Startup orchestration**   | 🟡 command básico       | ✅ Abas + startup_command        |
+| **Healthcheck wait**        | ❌ Não bloqueia         | ✅ Espera ativamente             |
+| **Agrupamento semântico**   | ❌ Lista flat           | ✅ db vs service                 |
+| **Project discovery**       | ❌ Manual               | ✅ Auto-scan                     |
+| **Hub singleton**           | ❌ Recria sempre        | ✅ Reusa container               |
+| **User namespace (padrão)** | 🟡 `user: "1000:1000"`  | ✅ Automático                    |
+| **Host network (padrão)**   | 🟡 `network_mode: host` | ✅ Automático                    |
+| **Flexibilidade total**     | ✅ Configure tudo       | 🟡 Opinionated                   |
+| **Multi-plataforma**        | ✅ Linux/Mac/Windows    | 🔴 Linux only                    |
 
 ---
 
 ### Quando usar cada um?
 
 **Use Docker Compose se você precisa:**
+
 - ✅ Rodar em Mac/Windows
 - ✅ Máxima flexibilidade
 - ✅ Paridade com produção
 - ✅ Ecossistema universal
 
 **Use Devobox se você quer:**
+
 - ✅ Linux nativo
 - ✅ Múltiplos projetos interdependentes
 - ✅ Terminal multiplexado integrado

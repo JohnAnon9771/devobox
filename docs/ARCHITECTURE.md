@@ -30,15 +30,15 @@ Devobox é um **gerenciador de ambientes de desenvolvimento containerizados** co
 
 ### Tech Stack
 
-| Componente | Tecnologia | Versão | Propósito |
-|-----------|-----------|--------|-----------|
-| **Runtime** | Rust | 1.70+ | Performance, segurança de tipos |
-| **Container Engine** | Podman | 4.0+ | Daemonless, rootless |
-| **CLI Framework** | Clap | 4.5 | Parsing de argumentos |
-| **Config** | TOML | - | Configuração declarativa |
-| **Base Image** | Debian Bookworm | 12 | OS do container |
-| **Version Manager** | Mise | Latest | Gerenciar runtimes |
-| **Shell Prompt** | Starship | Latest | Prompt moderno |
+| Componente           | Tecnologia    | Versão | Propósito                       |
+| -------------------- | ------------- | ------ | ------------------------------- |
+| **Runtime**          | Rust          | 1.70+  | Performance, segurança de tipos |
+| **Container Engine** | Podman        | 4.0+   | Daemonless, rootless            |
+| **CLI Framework**    | Clap          | 4.5    | Parsing de argumentos           |
+| **Config**           | TOML          | -      | Configuração declarativa        |
+| **Base Image**       | Debian Trixie | Stable | OS do container                 |
+| **Version Manager**  | Mise          | Latest | Gerenciar runtimes              |
+| **Shell Prompt**     | Starship      | Latest | Prompt moderno                  |
 
 ### Arquitetura Clean
 
@@ -63,6 +63,7 @@ Devobox segue **Clean Architecture** com separação de responsabilidades:
 ### CLI Layer (`src/cli/`)
 
 **Responsabilidades:**
+
 - Parsing de comandos com Clap
 - Validação de inputs
 - Feedback visual (spinners, progress)
@@ -70,14 +71,15 @@ Devobox segue **Clean Architecture** com separação de responsabilidades:
 
 **Arquivos principais:**
 
-| Arquivo | Responsabilidade | Linhas |
-|---------|-----------------|--------|
-| `main.rs` | Entry point, definição de comandos | ~200 |
-| `runtime.rs` | Comandos: shell, up, down, status, project | ~400 |
-| `builder.rs` | Comandos: init, build, rebuild | ~200 |
-| `setup.rs` | Setup inicial de config | ~100 |
+| Arquivo      | Responsabilidade                           | Linhas |
+| ------------ | ------------------------------------------ | ------ |
+| `main.rs`    | Entry point, definição de comandos         | ~200   |
+| `runtime.rs` | Comandos: shell, up, down, status, project | ~400   |
+| `builder.rs` | Comandos: init, build, rebuild             | ~200   |
+| `setup.rs`   | Setup inicial de config                    | ~100   |
 
 **Comandos implementados:**
+
 ```rust
 // src/main.rs
 enum Commands {
@@ -99,6 +101,7 @@ enum Commands {
 ### Service Layer (`src/services/`)
 
 **Responsabilidades:**
+
 - Orquestração de serviços
 - Healthchecks ativos
 - Workflow de start/stop
@@ -106,14 +109,15 @@ enum Commands {
 
 **Arquivos principais:**
 
-| Arquivo | Responsabilidade | Linhas |
-|---------|-----------------|--------|
-| `orchestrator.rs` | Orquestração, healthchecks | ~300 |
-| `container_service.rs` | Lifecycle de containers | ~200 |
-| `system_service.rs` | Build, cleanup | ~150 |
-| `zellij_service.rs` | Sessões Zellij por projeto | ~180 |
+| Arquivo                | Responsabilidade           | Linhas |
+| ---------------------- | -------------------------- | ------ |
+| `orchestrator.rs`      | Orquestração, healthchecks | ~300   |
+| `container_service.rs` | Lifecycle de containers    | ~200   |
+| `system_service.rs`    | Build, cleanup             | ~150   |
+| `zellij_service.rs`    | Sessões Zellij por projeto | ~180   |
 
 **Fluxo de orquestração:**
+
 ```rust
 // src/services/orchestrator.rs
 pub fn start_services(&self, services: &[Service]) -> Result<()> {
@@ -139,6 +143,7 @@ pub fn wait_for_healthy(&self, name: &str, retries: u32) -> Result<()> {
 ### Domain Layer (`src/domain/`)
 
 **Responsabilidades:**
+
 - Definir entidades core
 - Enums e tipos de valor
 - Traits e abstrações
@@ -146,11 +151,11 @@ pub fn wait_for_healthy(&self, name: &str, retries: u32) -> Result<()> {
 
 **Arquivos principais:**
 
-| Arquivo | Conteúdo | Linhas |
-|---------|----------|--------|
-| `container.rs` | Service, ContainerSpec, ContainerState | ~150 |
-| `traits.rs` | ContainerRuntime trait | ~50 |
-| `project.rs` | Project, ProjectConfig | ~100 |
+| Arquivo        | Conteúdo                               | Linhas |
+| -------------- | -------------------------------------- | ------ |
+| `container.rs` | Service, ContainerSpec, ContainerState | ~150   |
+| `traits.rs`    | ContainerRuntime trait                 | ~50    |
+| `project.rs`   | Project, ProjectConfig                 | ~100   |
 
 **Entidades principais:**
 
@@ -204,6 +209,7 @@ pub trait ContainerRuntime {
 ### Infrastructure Layer (`src/infra/`)
 
 **Responsabilidades:**
+
 - Implementar traits de domínio
 - Integração com Podman CLI
 - Parsing de configuração
@@ -211,11 +217,11 @@ pub trait ContainerRuntime {
 
 **Arquivos principais:**
 
-| Arquivo | Responsabilidade | Linhas |
-|---------|-----------------|--------|
-| `podman_adapter.rs` | Implementa ContainerRuntime | ~500 |
-| `config.rs` | Loading e validação de config | ~600 |
-| `project_discovery.rs` | Descoberta de projetos | ~150 |
+| Arquivo                | Responsabilidade              | Linhas |
+| ---------------------- | ----------------------------- | ------ |
+| `podman_adapter.rs`    | Implementa ContainerRuntime   | ~500   |
+| `config.rs`            | Loading e validação de config | ~600   |
+| `project_discovery.rs` | Descoberta de projetos        | ~150   |
 
 **Implementação Podman:**
 
@@ -293,6 +299,7 @@ Arquitetura inspirada em redes: **Hub (cubo) + Spokes (raios)**.
 ### Hub Container
 
 **Características:**
+
 - Nome: `devobox` (fixo, singleton)
 - Network: `--network host`
 - User namespace: `--userns=keep-id`
@@ -300,6 +307,7 @@ Arquitetura inspirada em redes: **Hub (cubo) + Spokes (raios)**.
 - Persistente (não é recriado)
 
 **Criação:**
+
 ```rust
 // src/cli/builder.rs
 let hub_spec = ContainerSpec {
@@ -315,11 +323,13 @@ let hub_spec = ContainerSpec {
 ```
 
 **Por que host network?**
+
 - Zero overhead de NAT
 - `localhost:3000` funciona direto
 - Simplicidade de port access
 
 **Lifecycle:**
+
 ```rust
 // src/cli/runtime.rs
 pub fn shell() -> Result<()> {
@@ -338,12 +348,14 @@ pub fn shell() -> Result<()> {
 ### Spoke Containers
 
 **Características:**
+
 - Network: `bridge` (padrão)
 - Port mapping: explícito (`-p 5432:5432`)
 - Isolados do Hub
 - Lifecycle: managed pelo orchestrator
 
 **Criação:**
+
 ```rust
 // src/cli/builder.rs
 for service in &config.services {
@@ -353,6 +365,7 @@ for service in &config.services {
 ```
 
 **Por que bridge network?**
+
 - Isolamento de serviços
 - Controle explícito de portas
 - Segurança por padrão
@@ -374,6 +387,7 @@ Final Config
 ```
 
 **Implementação:**
+
 ```rust
 // src/infra/config.rs
 pub fn load_app_config(local_path: Option<&Path>) -> Result<AppConfig> {
@@ -522,10 +536,10 @@ pub fn start_services(&self, services: &[Service]) -> Result<()> {
 
 ### Estratégia Híbrida
 
-| Container | Network | Razão |
-|-----------|---------|-------|
-| **Hub** | Host | Performance, simplicidade |
-| **Services** | Bridge | Isolamento, segurança |
+| Container    | Network | Razão                     |
+| ------------ | ------- | ------------------------- |
+| **Hub**      | Host    | Performance, simplicidade |
+| **Services** | Bridge  | Isolamento, segurança     |
 
 ### Host Network (Hub)
 
@@ -535,6 +549,7 @@ podman create --network host --name devobox ...
 ```
 
 **Implicações:**
+
 - Container compartilha IP com host
 - `localhost:3000` no container = `localhost:3000` no host
 - Sem NAT, sem overhead
@@ -552,6 +567,7 @@ podman create --name pg -p 5432:5432 postgres:16
 ```
 
 **Implicações:**
+
 - Container tem IP próprio na bridge
 - Port mapping explícito (`-p HOST:CONTAINER`)
 - Isolado do Hub
@@ -566,11 +582,13 @@ podman create --name pg -p 5432:5432 postgres:16
 ```
 
 **O que faz:**
+
 - Mapeia UID do container → UID do host
 - Exemplo: User `dev` (UID 1000) no container = User `joao` (UID 1000) no host
 - Arquivos criados no container pertencem a você no host
 
 **Sem keep-id:**
+
 ```
 # Arquivo criado no container
 -rw-r--r-- 1 root root 245 ... arquivo.rb
@@ -579,6 +597,7 @@ podman create --name pg -p 5432:5432 postgres:16
 ```
 
 **Com keep-id:**
+
 ```
 # Arquivo criado no container
 -rw-r--r-- 1 joao joao 245 ... arquivo.rb
@@ -592,22 +611,23 @@ podman create --name pg -p 5432:5432 postgres:16
 
 ### Arquivos-Chave
 
-| Arquivo | Propósito | LoC |
-|---------|-----------|-----|
-| **`src/main.rs`** | Entry point, CLI definitions | ~200 |
-| **`src/cli/runtime.rs`** | Runtime commands (shell, up, down, project) | ~400 |
-| **`src/cli/builder.rs`** | Build commands (init, build) | ~200 |
-| **`src/services/orchestrator.rs`** | Service orchestration, healthchecks | ~300 |
-| **`src/services/zellij_service.rs`** | Zellij session management | ~180 |
-| **`src/domain/container.rs`** | Core entities | ~150 |
-| **`src/domain/project.rs`** | Project entities | ~100 |
-| **`src/infra/podman_adapter.rs`** | Podman CLI integration | ~500 |
-| **`src/infra/config.rs`** | Config loading, validation | ~600 |
-| **`src/infra/project_discovery.rs`** | Project discovery in ~/code | ~150 |
+| Arquivo                              | Propósito                                   | LoC  |
+| ------------------------------------ | ------------------------------------------- | ---- |
+| **`src/main.rs`**                    | Entry point, CLI definitions                | ~200 |
+| **`src/cli/runtime.rs`**             | Runtime commands (shell, up, down, project) | ~400 |
+| **`src/cli/builder.rs`**             | Build commands (init, build)                | ~200 |
+| **`src/services/orchestrator.rs`**   | Service orchestration, healthchecks         | ~300 |
+| **`src/services/zellij_service.rs`** | Zellij session management                   | ~180 |
+| **`src/domain/container.rs`**        | Core entities                               | ~150 |
+| **`src/domain/project.rs`**          | Project entities                            | ~100 |
+| **`src/infra/podman_adapter.rs`**    | Podman CLI integration                      | ~500 |
+| **`src/infra/config.rs`**            | Config loading, validation                  | ~600 |
+| **`src/infra/project_discovery.rs`** | Project discovery in ~/code                 | ~150 |
 
 ### Funções Importantes
 
 **Container creation:**
+
 ```rust
 // src/infra/podman_adapter.rs:create_container()
 impl ContainerRuntime for PodmanAdapter {
@@ -616,24 +636,28 @@ impl ContainerRuntime for PodmanAdapter {
 ```
 
 **Service startup:**
+
 ```rust
 // src/services/orchestrator.rs:start_services()
 pub fn start_services(&self, services: &[Service]) -> Result<()> { ... }
 ```
 
 **Config loading:**
+
 ```rust
 // src/infra/config.rs:load_app_config()
 pub fn load_app_config(local_path: Option<&Path>) -> Result<AppConfig> { ... }
 ```
 
 **Project discovery:**
+
 ```rust
 // src/infra/project_discovery.rs:discover_projects()
 pub fn discover_projects(code_dir: &Path) -> Result<Vec<Project>> { ... }
 ```
 
 **Healthcheck waiting:**
+
 ```rust
 // src/services/orchestrator.rs:wait_for_healthy()
 pub fn wait_for_healthy(&self, name: &str, retries: u32) -> Result<()> { ... }
@@ -646,6 +670,7 @@ pub fn wait_for_healthy(&self, name: &str, retries: u32) -> Result<()> { ... }
 ### Por que Podman em vez de Docker?
 
 **Razões:**
+
 1. **Daemonless:** Não precisa de daemon em background
 2. **Rootless:** Roda sem privilégios de root (mais seguro)
 3. **OCI-compliant:** Compatível com padrão aberto
@@ -659,6 +684,7 @@ pub fn wait_for_healthy(&self, name: &str, retries: u32) -> Result<()> { ... }
 ### Por que Rust?
 
 **Razões:**
+
 1. **Performance:** Binário nativo, startup rápido
 2. **Segurança:** Sistema de tipos evita bugs comuns
 3. **Cross-platform:** Compila para Linux/Mac/Windows
@@ -671,6 +697,7 @@ pub fn wait_for_healthy(&self, name: &str, retries: u32) -> Result<()> { ... }
 ### Por que Host Network para Hub?
 
 **Razões:**
+
 1. **Performance:** Zero overhead de NAT
 2. **Simplicidade:** Não precisa mapear portas
 3. **Compatibilidade:** Apps funcionam como desenvolvimento nativo
@@ -682,6 +709,7 @@ pub fn wait_for_healthy(&self, name: &str, retries: u32) -> Result<()> { ... }
 ### Por que Bridge Network para Services?
 
 **Razões:**
+
 1. **Isolamento:** Bancos não poluem namespace do Hub
 2. **Controle:** Port mapping explícito
 3. **Segurança:** Default deny
@@ -693,6 +721,7 @@ pub fn wait_for_healthy(&self, name: &str, retries: u32) -> Result<()> { ... }
 ### Por que TOML (e não apenas YAML)?
 
 **Razões:**
+
 1. **Type-safe:** Mais fácil parsear com serde
 2. **Menos ambíguo:** YAML tem muitas pegadinhas (indentação, yes/no como boolean)
 3. **Familiar:** Usado por Cargo, Rust toolchain
@@ -704,6 +733,7 @@ pub fn wait_for_healthy(&self, name: &str, retries: u32) -> Result<()> { ... }
 ### Por que Clean Architecture?
 
 **Razões:**
+
 1. **Testabilidade:** Camadas independentes são fáceis de testar
 2. **Manutenibilidade:** Mudanças de infraestrutura não afetam domínio
 3. **Flexibilidade:** Fácil trocar Podman por Docker se necessário
@@ -753,6 +783,7 @@ install -Dm755 ./target/release/devobox ~/.local/bin/devobox
 ---
 
 **Para mais informações:**
+
 - [Guia Completo](GUIDE.md) - Conceitos e workflows
 - [Cookbook](COOKBOOK.md) - Receitas práticas
 - [Getting Started](../GETTING_STARTED.md) - Tutorial inicial

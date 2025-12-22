@@ -51,7 +51,7 @@ $ bundle install
 
 Isolar as runtimes dentro de um container baseado em **Debian Stable**:
 
-- Debian Bookworm congela versões de bibliotecas por ~2 anos
+- Debian Trixie (Testing) mantém bibliotecas atualizadas (rolling-like)
 - Seu host pode atualizar livremente
 - Container permanece estável
 
@@ -849,7 +849,7 @@ $ bundle install
 └───────────┬────────────┘
             │
 ┌───────────▼────────────┐
-│ Container (Debian 12)  │
+│ Container (Debian Trixie)│
 │ - OpenSSL: 1.1.1       │ ← Congelado
 │ - glibc: 2.35          │
 │ - Ruby compila contra  │

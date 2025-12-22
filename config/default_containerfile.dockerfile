@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM docker.io/debian:bookworm-slim
+FROM docker.io/debian:trixie-slim
 
 ARG USERNAME=dev
 ARG USER_UID=1000

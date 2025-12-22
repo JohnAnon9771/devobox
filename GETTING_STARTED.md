@@ -102,7 +102,7 @@ devobox init
 
 Durante os próximos 3-5 minutos, o Devobox está:
 1. ✓ Criando diretório de config em `~/.config/devobox`
-2. ✓ Baixando imagem base Debian Bookworm
+2. ✓ Baixando imagem base Debian Trixie
 3. ✓ Instalando ferramentas (Neovim, Zellij, Mise, Git)
 4. ✓ Construindo seu container principal
 5. ✓ Preparando containers de serviço
