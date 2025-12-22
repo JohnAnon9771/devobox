@@ -26,6 +26,7 @@ pub fn ensure_config_dir(config_dir: &Path) -> Result<()> {
 pub const DEFAULT_DEVOBOX_TOML_NAME: &str = "devobox.toml";
 pub const MISE_TOML: &str = include_str!("../../config/mise.toml");
 pub const STARSHIP_TOML: &str = include_str!("../../config/starship.toml");
+pub const ZELLIJ_KDL: &str = include_str!("../../config/zellij.kdl");
 
 #[derive(Deserialize, Debug, Default)]
 pub struct PathsConfig {
@@ -245,6 +246,7 @@ pub fn install_default_config(target_dir: &Path) -> Result<()> {
             DEFAULT_DEVOBOX_TOML_NAME,
             include_str!("../../config/default_devobox.toml"),
         ),
+        ("zellij.kdl", ZELLIJ_KDL),
     ];
 
     for (name, content) in files {
