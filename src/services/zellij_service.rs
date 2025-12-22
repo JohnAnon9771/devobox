@@ -153,6 +153,9 @@ impl ZellijService {
         workdir: &Path,
         layout_path: &Path,
     ) -> Result<()> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/dev".to_string());
+        let config_dir = Path::new(&home).join(".config/zellij");
+
         let status = Command::new("zellij")
             .args([
                 "attach",
@@ -161,6 +164,7 @@ impl ZellijService {
                 "--layout",
                 &layout_path.to_string_lossy(),
             ])
+            .env("ZELLIJ_CONFIG_DIR", config_dir)
             .current_dir(workdir)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
@@ -237,8 +241,12 @@ impl ZellijService {
     /// * `Ok(())` - Session created successfully
     /// * `Err` - Session creation failed
     fn create(&self, session_name: &str, workdir: &Path) -> Result<()> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/dev".to_string());
+        let config_dir = Path::new(&home).join(".config/zellij");
+
         let status = Command::new("zellij")
             .args(["attach", "--create", session_name])
+            .env("ZELLIJ_CONFIG_DIR", config_dir)
             .current_dir(workdir)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
