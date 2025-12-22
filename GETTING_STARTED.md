@@ -78,8 +78,11 @@ ssh-keygen -t ed25519 -C "seu-email@exemplo.com"
 ### Passo 1: Baixar o Devobox
 
 ```bash
-curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 \
-  -o ~/.local/bin/devobox && chmod +x ~/.local/bin/devobox
+curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/x86_64-unknown-linux-gnu.tar.gz -o devobox.tar.gz
+tar -xzf devobox.tar.gz
+chmod +x devobox
+mv devobox ~/.local/bin/devobox
+rm devobox.tar.gz
 ```
 
 ### Passo 2: Verificar Instalação

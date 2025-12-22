@@ -748,9 +748,11 @@ jobs:
 
       - name: Download Devobox
         run: |
-          curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 \
-            -o /usr/local/bin/devobox
-          chmod +x /usr/local/bin/devobox
+          curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/x86_64-unknown-linux-gnu.tar.gz -o devobox.tar.gz
+          tar -xzf devobox.tar.gz
+          chmod +x devobox
+          sudo mv devobox /usr/local/bin/devobox
+          rm devobox.tar.gz
 
       - name: Initialize Devobox
         run: devobox init
@@ -775,8 +777,11 @@ test:
   before_script:
     - apt-get update
     - apt-get install -y podman curl
-    - curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 -o /usr/local/bin/devobox
-    - chmod +x /usr/local/bin/devobox
+    - curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/x86_64-unknown-linux-gnu.tar.gz -o devobox.tar.gz
+    - tar -xzf devobox.tar.gz
+    - chmod +x devobox
+    - mv devobox /usr/local/bin/devobox
+    - rm devobox.tar.gz
     - devobox init
 
   script:

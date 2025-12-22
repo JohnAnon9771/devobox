@@ -85,9 +85,8 @@ RUN --mount=type=cache,target=/home/$USERNAME/.npm,uid=$USER_UID,gid=$USER_GID \
     mise use -g npm:@google/gemini-cli
 
 # install devobox (enables devobox-in-devobox)
-RUN curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/x86_64-unknown-linux-gnu.tar.gz -o /tmp/devobox.tar.gz && \
-    tar -xzf /tmp/devobox.tar.gz -C /tmp && \
-    mv /tmp/devobox /usr/local/bin/devobox && \
+RUN curl -fL https://github.com/JohnAnon9771/devobox/releases/latest/download/x86_64-unknown-linux-gnu.tar.gz -o /tmp/devobox.tar.gz && \
+    tar -xzf /tmp/devobox.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/devobox && \
     rm /tmp/devobox.tar.gz
 

@@ -140,8 +140,11 @@ Um orquestrador com healthchecks ativos e controle granular.
 
 ```bash
 # Baixar e instalar
-curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/devobox-linux-x86_64 \
-  -o ~/.local/bin/devobox && chmod +x ~/.local/bin/devobox
+curl -L https://github.com/JohnAnon9771/devobox/releases/latest/download/x86_64-unknown-linux-gnu.tar.gz -o devobox.tar.gz
+tar -xzf devobox.tar.gz
+chmod +x devobox
+mv devobox ~/.local/bin/devobox
+rm devobox.tar.gz
 
 # Adicionar ao PATH (se necessário)
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
