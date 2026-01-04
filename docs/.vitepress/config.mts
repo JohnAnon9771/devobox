@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   title: "Devobox",
+  base: "/devobox/",
   description: "Estação de Trabalho Híbrida para Desenvolvimento no Linux",
   lang: 'pt-BR',
   cleanUrls: true,
