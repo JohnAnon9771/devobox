@@ -1611,5 +1611,5 @@ podman run --shm-size=2g ...
 
 **Próximos passos:**
 
-➡️ **[Cookbook](COOKBOOK.md)** - Receitas práticas para cenários comuns
-➡️ **[Arquitetura](ARCHITECTURE.md)** - Detalhes técnicos de implementação
+➡️ **[Cookbook](../cookbook/)** - Receitas práticas para cenários comuns
+➡️ **[Arquitetura](../architecture/)** - Detalhes técnicos de implementação

@@ -2,7 +2,7 @@
 
 **Estação de Trabalho Híbrida para Desenvolvimento no Linux**
 
-![Arquitetura Devobox](docs/architecture.png)
+![Arquitetura Devobox](docs/public/architecture.png)
 
 > _Desenvolva sem poluir seu sistema, sem perder performance e sem reinventar o ambiente a cada projeto._
 
@@ -394,19 +394,19 @@ ports = ["6379:6379"]
 
 ### Novo no Devobox?
 
-➡️ **[Guia de Início Rápido](GETTING_STARTED.md)** - De zero a produtivo em 15 minutos
+➡️ **[Guia de Início Rápido](docs/getting-started/index.md)** - De zero a produtivo em 15 minutos
 
 ### Quer entender conceitos?
 
-➡️ **[Guia Completo](docs/GUIDE.md)** - Workflows, comparações e tópicos avançados
+➡️ **[Guia Completo](docs/guide/index.md)** - Workflows, comparações e tópicos avançados
 
 ### Precisa de exemplos práticos?
 
-➡️ **[Cookbook](docs/COOKBOOK.md)** - Receitas copy-paste para cenários comuns
+➡️ **[Cookbook](docs/cookbook/index.md)** - Receitas copy-paste para cenários comuns
 
 ### Contribuindo ou curioso?
 
-➡️ **[Arquitetura](docs/ARCHITECTURE.md)** - Referência técnica completa
+➡️ **[Arquitetura](docs/architecture/index.md)** - Referência técnica completa
 
 ---
 
@@ -568,7 +568,7 @@ devobox project list
 - ✅ Zero-config, convenção sobre configuração
 - ✅ Workflow "pet container"
 
-[Leia a comparação completa com exemplos](docs/GUIDE.md#parte-4-comparações-detalhadas)
+[Leia a comparação completa com exemplos](docs/guide/index.md#parte-4-comparações-detalhadas)
 
 ---
 

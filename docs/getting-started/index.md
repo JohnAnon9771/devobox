@@ -424,13 +424,13 @@ Agora conecte via `psql -h localhost -p 5433`
 ### Agora você pode:
 
 **Aprender conceitos mais profundos:**
-➡️ [Guia Completo](docs/GUIDE.md) - Entenda Hub & Spoke, workflows e comparações
+➡️ [Guia Completo](../guide/) - Entenda Hub & Spoke, workflows e comparações
 
 **Ver exemplos práticos:**
-➡️ [Cookbook](docs/COOKBOOK.md) - Receitas para Rails, Django, microserviços, etc.
+➡️ [Cookbook](../cookbook/) - Receitas para Rails, Django, microserviços, etc.
 
 **Entender a arquitetura:**
-➡️ [Documentação de Arquitetura](docs/ARCHITECTURE.md) - Para contribuidores
+➡️ [Documentação de Arquitetura](../architecture/) - Para contribuidores
 
 ---
 

@@ -786,4 +786,4 @@ install -Dm755 ./target/release/devobox ~/.local/bin/devobox
 
 - [Guia Completo](GUIDE.md) - Conceitos e workflows
 - [Cookbook](COOKBOOK.md) - Receitas práticas
-- [Getting Started](../GETTING_STARTED.md) - Tutorial inicial
+- [Getting Started](../getting-started/) - Tutorial inicial

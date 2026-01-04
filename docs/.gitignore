@@ -1,0 +1,4 @@
+# .gitignore for docs
+node_modules
+.vitepress/dist
+.vitepress/cache
