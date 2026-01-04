@@ -6,7 +6,7 @@ export default defineConfig({
   base: "/devobox/",
   description: "Estação de Trabalho Híbrida para Desenvolvimento no Linux",
   lang: 'pt-BR',
-  cleanUrls: true,
+  cleanUrls: false,
   lastUpdated: true,
 
   ignoreDeadLinks: [
