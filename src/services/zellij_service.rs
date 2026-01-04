@@ -158,8 +158,7 @@ impl ZellijService {
 
         let status = Command::new("zellij")
             .args([
-                "attach",
-                "--create",
+                "--session",
                 session_name,
                 "--layout",
                 &layout_path.to_string_lossy(),
