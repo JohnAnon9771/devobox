@@ -8,6 +8,11 @@ export default defineConfig({
   cleanUrls: true,
   lastUpdated: true,
 
+  ignoreDeadLinks: [
+    // ignore all localhost links
+    /^https?:\/\/localhost/,
+  ],
+
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }],
     ['meta', { name: 'theme-color', content: '#3eaf7c' }],
