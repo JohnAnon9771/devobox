@@ -232,23 +232,57 @@ impl HostFeature for GuiFeature {
         let mut config = ContainerConfigFragment::default();
 
         // Wayland
-        if let Ok(wayland_display) = std::env::var("WAYLAND_DISPLAY")
-            && let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR")
-        {
-            let host_socket = Path::new(&xdg_runtime).join(&wayland_display);
-            if host_socket.exists() {
-                info!("  Wayland detectado: {}", wayland_display);
+        let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
+        if let Some(wayland_val) = wayland_display {
+            let uid = std::fs::metadata("/proc/self")
+                .map(|m| m.uid())
+                .unwrap_or(1000);
+
+            // Potential locations for the Wayland socket
+            let mut candidates = Vec::new();
+
+            // 1. Trust XDG_RUNTIME_DIR if set
+            if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+                candidates.push(Path::new(&xdg).join(&wayland_val));
+            }
+
+            // 2. Standard location /run/user/$UID/
+            candidates.push(PathBuf::from(format!("/run/user/{}/{}", uid, wayland_val)));
+
+            // 3. Fallback to /tmp
+            candidates.push(PathBuf::from(format!("/tmp/{}", wayland_val)));
+
+            // Find the first one that exists
+            let found_socket = candidates.into_iter().find(|p| p.exists());
+
+            if let Some(host_socket_path) = found_socket {
+                // Handle case where WAYLAND_DISPLAY might be absolute path string
+                let socket_filename = host_socket_path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "wayland-0".to_string());
+
+                info!(
+                    "  Wayland detectado: {} (socket: {:?})",
+                    wayland_val, host_socket_path
+                );
+
                 config.volumes.push(format!(
                     "{}:/run/user/1000/{}",
-                    host_socket.to_string_lossy(),
-                    wayland_display
+                    host_socket_path.to_string_lossy(),
+                    socket_filename
                 ));
                 config
                     .env
-                    .push(format!("WAYLAND_DISPLAY={}", wayland_display));
+                    .push(format!("WAYLAND_DISPLAY={}", socket_filename));
                 config
                     .env
                     .push("XDG_RUNTIME_DIR=/run/user/1000".to_string());
+            } else {
+                warn!(
+                    "  WAYLAND_DISPLAY definido ({}) mas socket não encontrado em locais padrões.",
+                    wayland_val
+                );
             }
         }
 
@@ -446,7 +480,14 @@ pub fn build(config_dir: &Path, skip_cleanup: bool) -> Result<()> {
 
     let mut container_env = final_config.env.clone();
     container_env.push("DEVOBOX_CONTAINER=1".to_string());
-    container_env.push("XDG_RUNTIME_DIR=/tmp".to_string());
+
+    // Only set default XDG_RUNTIME_DIR if not set by features (e.g. Wayland)
+    if !container_env
+        .iter()
+        .any(|e| e.starts_with("XDG_RUNTIME_DIR="))
+    {
+        container_env.push("XDG_RUNTIME_DIR=/tmp".to_string());
+    }
 
     let extra_args_refs: Vec<&str> = all_extra_args.iter().map(|s| s.as_str()).collect();
 
@@ -636,6 +677,101 @@ mod tests {
                 );
 
                 std::fs::remove_dir_all("/tmp/my-code-project").ok();
+            },
+        );
+    }
+
+    #[test]
+    fn test_gui_feature_wayland_xdg_runtime() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let socket_path = temp_dir.path().join("wayland-0");
+        std::fs::File::create(&socket_path).unwrap();
+
+        with_env_vars(
+            vec![
+                ("WAYLAND_DISPLAY", Some("wayland-0")),
+                ("XDG_RUNTIME_DIR", Some(temp_dir.path().to_str().unwrap())),
+            ],
+            || {
+                let feature = GuiFeature;
+                let ctx = BuildContext {};
+                let res = feature.configure(&ctx).unwrap();
+
+                assert!(res.is_some());
+                let config = res.unwrap();
+
+                assert!(
+                    config
+                        .env
+                        .contains(&"WAYLAND_DISPLAY=wayland-0".to_string())
+                );
+                assert!(
+                    config
+                        .env
+                        .contains(&"XDG_RUNTIME_DIR=/run/user/1000".to_string())
+                );
+                assert!(config.volumes.iter().any(|v| v.contains("wayland-0")));
+            },
+        );
+    }
+
+    #[test]
+    fn test_gui_feature_wayland_fallback_tmp() {
+        let socket_path = Path::new("/tmp/wayland-fallback-test");
+        std::fs::File::create(socket_path).ok();
+
+        with_env_vars(
+            vec![
+                ("WAYLAND_DISPLAY", Some("wayland-fallback-test")),
+                ("XDG_RUNTIME_DIR", None),
+            ],
+            || {
+                let feature = GuiFeature;
+                let ctx = BuildContext {};
+                let res = feature.configure(&ctx).unwrap();
+
+                assert!(res.is_some());
+                let config = res.unwrap();
+
+                assert!(
+                    config
+                        .env
+                        .contains(&"WAYLAND_DISPLAY=wayland-fallback-test".to_string())
+                );
+                assert!(
+                    config
+                        .volumes
+                        .iter()
+                        .any(|v| v.contains("/tmp/wayland-fallback-test"))
+                );
+
+                std::fs::remove_file(socket_path).ok();
+            },
+        );
+    }
+
+    #[test]
+    fn test_gui_feature_wayland_no_socket() {
+        with_env_vars(
+            vec![
+                ("WAYLAND_DISPLAY", Some("wayland-nonexistent")),
+                ("XDG_RUNTIME_DIR", Some("/tmp")),
+            ],
+            || {
+                let feature = GuiFeature;
+                let ctx = BuildContext {};
+                let res = feature.configure(&ctx).unwrap();
+
+                // Should return Some(config) but WITHOUT wayland specific envs if socket not found?
+                // Or looking at code: it logs warn but continues.
+                // Actually, if we look at code:
+                // `if let Some(host_socket_path) = found_socket` -> block executed.
+                // else -> warn!.
+                // config is initialized at start of function.
+                // So checking if env vars are present is the way.
+
+                let config = res.unwrap_or_default();
+                assert!(!config.env.iter().any(|e| e.starts_with("WAYLAND_DISPLAY=")));
             },
         );
     }
