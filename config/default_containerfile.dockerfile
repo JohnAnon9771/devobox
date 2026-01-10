@@ -12,6 +12,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
     build-essential git curl wget sudo \
+    pkg-config \
     openssh-client \
     libssl-dev zlib1g-dev libreadline-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev \
     libpq-dev redis-tools imagemagick libvips ripgrep fd-find \

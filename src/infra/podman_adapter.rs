@@ -79,6 +79,11 @@ impl ContainerRuntime for PodmanAdapter {
             args.push("--network".into());
             args.push(net.into());
         }
+
+        // Force Google/Cloudflare DNS to avoid slow/timeout issues with host DNS bridging
+        args.push("--dns=8.8.8.8".into());
+        args.push("--dns=1.1.1.1".into());
+
         if let Some(userns) = spec.userns {
             args.push("--userns".into());
             args.push(userns.into());
