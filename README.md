@@ -131,8 +131,6 @@ sudo chown -R $USER:$USER ~/devobox
 </details>
 
 <details>
-
-<details>
 <summary><strong>Container não inicia</strong></summary>
 
 ```bash
