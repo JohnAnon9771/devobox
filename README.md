@@ -90,6 +90,30 @@ zellij attach -c dev               # Sessão Zellij
 
 ---
 
+## 🔗 Inicializar Starship e Mise automaticamente no bash
+
+Para ativar o prompt moderno do Starship e o gerenciador de versões Mise em todas as sessões bash do Devobox, execute dentro do container:
+
+```bash
+cat << 'EOF' >> ~/.bashrc
+
+# Ativa Starship Prompt
+if command -v starship &> /dev/null; then
+  eval "$(starship init bash)"
+fi
+
+# Ativa Mise Version Manager
+if command -v mise &> /dev/null; then
+  eval "$(mise activate bash)"
+fi
+
+EOF
+```
+
+Pronto! Da próxima vez que entrar no Devobox, o Starship e o Mise já estarão ativos no bash.
+
+---
+
 ## ⚙️ Personalização
 
 ### Adicionar pacotes
