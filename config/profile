@@ -1,6 +1,10 @@
 # ~/.profile: executed by the command interpreter for login shells.
 # https://wiki.archlinux.org/title/Bash#Configuration_files
 
+# Default editor
+export EDITOR=nvim
+export VISUAL=nvim
+
 # Starship Prompt
 if command -v starship &> /dev/null; then
   eval "$(starship init bash)"
