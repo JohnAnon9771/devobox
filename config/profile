@@ -1,0 +1,12 @@
+# ~/.profile: executed by the command interpreter for login shells.
+# https://wiki.archlinux.org/title/Bash#Configuration_files
+
+# Starship Prompt
+if command -v starship &> /dev/null; then
+  eval "$(starship init bash)"
+fi
+
+# Mise Version Manager
+if command -v mise &> /dev/null; then
+  eval "$(mise activate bash)"
+fi
