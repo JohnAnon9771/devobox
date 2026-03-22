@@ -19,7 +19,22 @@ distrobox --version  # Verificar instalação
 
 Não tem? Instale em: https://distrobox.it
 
-### Instalação (4 passos)
+### Instalação (1 comando)
+
+```bash
+curl -fLo- https://raw.githubusercontent.com/JohnAnon9771/devobox/main/install.sh | bash
+```
+
+O script de instalação vai:
+- Baixar a configuração do Distrobox
+- Criar os diretórios necessários
+- Criar o container
+- Criar o atalho `devobox`
+
+**Pronto!** Entre com `devobox` ou `distrobox enter -nw devobox`
+
+<details>
+<summary><strong>Instalação manual (passo a passo)</strong></summary>
 
 ```bash
 # 1. Baixar configuração
@@ -42,7 +57,7 @@ EOF
 chmod +x ~/.local/bin/devobox
 ```
 
-**Pronto!** Entre com `devobox` ou `distrobox enter -nw devobox`
+</details>
 
 ---
 
