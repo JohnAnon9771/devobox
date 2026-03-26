@@ -29,25 +29,25 @@ format = '([$all_status$ahead_behind]($style) )'
 [rust]
 symbol = " "
 style = "bold #ce412b"
-format = "[$symbol($version )]($style)"
+format = "[$symbol($version )]($style) "
 
 # Ruby: Official Ruby Red (#CC342D)
 [ruby]
 symbol = " "
 style = "bold #CC342D"
-format = "[$symbol($version )]($style)"
+format = "[$symbol($version )]($style) "
 
 # Node: Standard Green
 [nodejs]
 symbol = " "
 style = "bold green"
-format = "[$symbol($version )]($style)"
+format = "[$symbol($version )]($style) "
 
 # Go: Cyan
 [golang]
 symbol = " "
 style = "bold cyan"
-format = "[$symbol($version )]($style)"
+format = "[$symbol($version )]($style) "
 
 # Package version (shows up if reading package.json/Cargo.toml)
 [package]

@@ -1,0 +1,134 @@
+// Zellij Configuration for Devobox
+// Novo formato de tema (v0.40+)
+
+theme "devobox-theme"
+default_shell "bash"
+
+themes {
+    devobox-theme {
+        text_unselected {
+            base "#D9E0EE"
+            background "#1E1E2E"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        text_selected {
+            base "#D9E0EE"
+            background "#181825"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        ribbon_unselected {
+            base "#D9E0EE"
+            background "#181825"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        ribbon_selected {
+            base "#D9E0EE"
+            background "#ce412b"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        frame_unselected {
+            base "#181825"
+            background "#1E1E2E"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        frame_selected {
+            base "#1793d1"
+            background "#1E1E2E"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        frame_highlight {
+            base "#ce412b"
+            background "#1E1E2E"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        exit_code_success {
+            base "#A6E3A1"
+            background "#1E1E2E"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        exit_code_error {
+            base "#F38BA8"
+            background "#1E1E2E"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        list_unselected {
+            base "#D9E0EE"
+            background "#1E1E2E"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        list_selected {
+            base "#D9E0EE"
+            background "#181825"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        table_title {
+            base "#1793d1"
+            background "#1E1E2E"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        table_cell_unselected {
+            base "#D9E0EE"
+            background "#1E1E2E"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        table_cell_selected {
+            base "#D9E0EE"
+            background "#181825"
+            emphasis_0 "#F38BA8"
+            emphasis_1 "#A6E3A1"
+            emphasis_2 "#F9E2AF"
+            emphasis_3 "#1793d1"
+        }
+        multiplayer_user_colors {
+            player_1 "#F38BA8"
+            player_2 "#A6E3A1"
+            player_3 "#F9E2AF"
+            player_4 "#1793d1"
+            player_5 "#F5C2E7"
+            player_6 "#89DCEB"
+            player_7 "#ce412b"
+            player_8 "#D9E0EE"
+            player_9 "#181825"
+            player_10 "#1E1E2E"
+        }
+    }
+}
